@@ -2,19 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Irys Confession Wall</title>
+  <title>Irys Testnet Uploader</title>
   <style>
-    body { font-family: sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
-    textarea { width: 100%; height: 100px; margin-top: 1rem; font-size: 1rem; }
-    button { padding: 0.5rem 1rem; margin-top: 1rem; font-size: 1rem; }
+    body { font-family: sans-serif; max-width: 500px; margin: auto; padding: 2rem; }
+    textarea { width: 100%; height: 120px; margin-top: 1rem; font-size: 1rem; }
+    button { margin-top: 1rem; font-size: 1rem; padding: 0.5rem 1rem; }
   </style>
 </head>
 <body>
-  <h2>📨 Irys Testnet Confession</h2>
+  <h2>Connect + Upload to Irys Testnet</h2>
   <button id="connect">Connect Wallet</button>
-  <br />
   <textarea id="message" placeholder="Write your confession..."></textarea>
-  <br />
   <button id="upload">Upload</button>
 
   <script type="module">
@@ -22,13 +20,13 @@
     import { WebEthereum } from "https://esm.sh/@irys/web-upload-ethereum@0.0.16";
     import { ethers } from "https://esm.sh/ethers@5.7.2?bundle";
 
-    let provider;
     let uploader;
+    const connectBtn = document.getElementById("connect");
+    const uploadBtn = document.getElementById("upload");
 
-    document.getElementById("connect").onclick = async () => {
+    connectBtn.onclick = async () => {
       try {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
         await provider.send("wallet_addEthereumChain", [{
           chainId: "0x4f6",
           chainName: "Irys Testnet",
@@ -42,21 +40,19 @@
         alert("✅ Wallet connected to Irys Testnet!");
       } catch (err) {
         console.error(err);
-        alert("❌ Wallet connection failed.");
+        alert("❌ Failed to connect wallet.");
       }
     };
 
-    document.getElementById("upload").onclick = async () => {
-      const msg = document.getElementById("message").value.trim();
-      if (!msg) return alert("⚠️ Empty message.");
-
-      if (!uploader) return alert("⚠️ Connect your wallet first.");
+    uploadBtn.onclick = async () => {
+      const msg = document.getElementById("message").value;
+      if (!uploader) return alert("❗ Connect wallet first.");
+      if (!msg) return alert("✏️ Message is empty.");
 
       try {
         const result = await uploader.upload(msg);
         const url = `https://gateway.irys.xyz/${result.id}`;
-        console.log("Uploaded:", url);
-        alert(`✅ Uploaded:\n${url}`);
+        alert("✅ Uploaded: " + url);
       } catch (err) {
         console.error(err);
         alert("❌ Upload failed.");
