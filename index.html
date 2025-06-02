@@ -34,7 +34,7 @@
 </head>
 <body>
   <h1>🕊️ ConfessWall</h1>
-  <p>Type your secret anonymously. Stored permanently onchain (Irys Devnet).</p>
+  <p>Type your secret anonymously. Stored permanently onchain (Irys Testnet).</p>
 
   <button onclick="connectWallet()">🔌 Connect Wallet</button>
 
@@ -44,10 +44,10 @@
     <div id="confessionLink"></div>
   </div>
 
-  <!-- ✅ Use working UMD version of Irys SDK -->
+  <!-- ✅ CORRECT CDN: explicitly use UMD & ensure Irys is global -->
   <script src="https://cdn.jsdelivr.net/npm/@irys/sdk@0.5.0-beta.6/dist/umd/index.js"></script>
 
-  <!-- ✅ Load your script after -->
+  <!-- ✅ Load your logic after -->
   <script src="script.js" defer></script>
 </body>
 </html>
