@@ -2,24 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ConfessWall</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container">
-    <h1>ConfessWall</h1>
-    <button onclick="connectWallet()">🔌 Connect Wallet</button>
+    <h1>🧱 ConfessWall</h1>
+    <button id="connectButton">🔌 Connect Wallet</button>
 
     <div id="mainUI" style="display: none;">
-      <textarea id="confession" placeholder="Write your anonymous confession..."></textarea>
-      <button onclick="uploadConfession()">📤 Upload Confession</button>
+      <textarea id="confession" placeholder="Type your confession here..."></textarea>
+      <button id="uploadButton">📤 Upload Confession</button>
       <div id="confessionLink"></div>
     </div>
   </div>
 
-  <!-- Load ethers.js + Irys SDK -->
-  <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <!-- Load ethers.js -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+  <!-- Your script -->
   <script type="module" src="script.js"></script>
 </body>
 </html>
