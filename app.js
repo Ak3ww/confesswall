@@ -24,3 +24,4 @@ const uploadToIrys = async () => {
 };
 
 document.getElementById("connect").onclick = uploadToIrys;
+ 
