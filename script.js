@@ -1,8 +1,8 @@
-import { Irys } from "https://esm.sh/@irys/sdk@0.5.0-beta.6";
+import { Irys } from "https://esm.sh/@irys/sdk@0.5.3?bundle";
 
 let irys = null;
 
-window.connectWallet = async function () {
+async function connectWallet() {
   if (!window.ethereum) {
     alert("MetaMask not found!");
     return;
@@ -19,9 +19,9 @@ window.connectWallet = async function () {
   });
 
   document.getElementById("mainUI").style.display = "block";
-};
+}
 
-window.uploadConfession = async function () {
+async function uploadConfession() {
   if (!irys) {
     alert("Connect your wallet first!");
     return;
@@ -45,4 +45,8 @@ window.uploadConfession = async function () {
     console.error(err);
     alert("Upload failed. Check console.");
   }
-};
+}
+
+// ✅ Bind to window so onclick="" works
+window.connectWallet = connectWallet;
+window.uploadConfession = uploadConfession;
