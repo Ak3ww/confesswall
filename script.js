@@ -13,7 +13,7 @@ async function connectWallet() {
 
   console.log("Connected.");
 
-  // ✅ Init Irys using global class
+  // ✅ Init Irys using global `Irys` exposed by UMD
   irys = new Irys({
     network: "devnet",
     token: "ethereum",
