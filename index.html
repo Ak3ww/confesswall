@@ -4,8 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ConfessWall</title>
-  <script src="https://cdn.jsdelivr.net/npm/@irys/sdk@latest/dist/index.umd.js"></script>
-
   <style>
     body {
       font-family: sans-serif;
@@ -30,12 +28,13 @@
     }
     #confessionLink {
       margin-top: 1rem;
+      word-break: break-word;
     }
   </style>
 </head>
 <body>
   <h1>🕊️ ConfessWall</h1>
-  <p>Type your secret anonymously. Stored permanently onchain.</p>
+  <p>Type your secret anonymously. Stored permanently onchain (Irys Devnet).</p>
 
   <button onclick="connectWallet()">🔌 Connect Wallet</button>
 
@@ -45,6 +44,10 @@
     <div id="confessionLink"></div>
   </div>
 
-  <script src="script.js"></script>
+  <!-- Load Irys SDK first -->
+  <script src="https://cdn.jsdelivr.net/npm/@irys/sdk@latest/dist/index.umd.js"></script>
+
+  <!-- Load your script after, using defer -->
+  <script src="script.js" defer></script>
 </body>
 </html>
