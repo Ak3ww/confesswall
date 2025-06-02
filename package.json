@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@irys/sdk": "^0.5.3",
+    "@irys/sdk": "0.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
