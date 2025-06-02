@@ -1,25 +1,17 @@
+import { Irys } from "https://esm.sh/@irys/sdk@0.5.0-beta.6";
+
 let irys = null;
 
-async function connectWallet() {
-  console.log("Connecting...");
+window.connectWallet = async function () {
   if (!window.ethereum) {
     alert("MetaMask not found!");
     return;
   }
 
-  const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
   const address = accounts[0];
   document.querySelector("button").innerText = `✅ Connected: ${address.slice(0, 6)}...`;
 
-  console.log("Connected.");
-
-  // ✅ FIX: ensure Irys is defined
-  if (typeof Irys === 'undefined') {
-    alert("Irys SDK not loaded.");
-    return;
-  }
-
-  // ✅ CORRECT network = testnet (not devnet)
   irys = new Irys({
     network: "testnet",
     token: "ethereum",
@@ -27,9 +19,9 @@ async function connectWallet() {
   });
 
   document.getElementById("mainUI").style.display = "block";
-}
+};
 
-async function uploadConfession() {
+window.uploadConfession = async function () {
   if (!irys) {
     alert("Connect your wallet first!");
     return;
@@ -53,4 +45,4 @@ async function uploadConfession() {
     console.error(err);
     alert("Upload failed. Check console.");
   }
-}
+};
