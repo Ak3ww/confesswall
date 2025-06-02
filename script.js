@@ -10,8 +10,8 @@ async function connectWallet() {
   const address = accounts[0];
   document.querySelector("button").innerText = `✅ Connected: ${address.slice(0, 6)}...`;
 
-  // Init Irys with UMD import
-  irys = new window.Irys.default({
+  // ✅ Correct usage for UMD global
+  irys = new Irys({
     network: "devnet",
     token: "ethereum",
     provider: window.ethereum,
