@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ConfessWall</title>
+  <script src="https://cdn.jsdelivr.net/npm/@irys/sdk"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #0d1117;
+      color: white;
+      text-align: center;
+      padding: 2rem;
+    }
+    textarea {
+      width: 100%;
+      max-width: 500px;
+      height: 120px;
+      margin: 1rem auto;
+      font-size: 16px;
+      padding: 1rem;
+    }
+    button {
+      padding: 0.6rem 1.2rem;
+      font-size: 16px;
+      margin: 1rem;
+      cursor: pointer;
+    }
+    #confessionLink {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>🕊️ ConfessWall</h1>
+  <p>Type your secret anonymously. Stored permanently onchain.</p>
+
+  <button onclick="connectWallet()">🔌 Connect Wallet</button>
+
+  <div id="mainUI" style="display: none;">
+    <textarea id="confession" placeholder="Type your confession here..."></textarea><br>
+    <button onclick="uploadConfession()">📝 Confess</button>
+    <div id="confessionLink"></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
