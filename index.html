@@ -4,13 +4,29 @@
   <meta charset="UTF-8" />
   <title>Irys Confess Wall</title>
   <style>
-    body { font-family: sans-serif; max-width: 500px; margin: auto; padding: 2rem; text-align: center; }
-    textarea { width: 100%; height: 120px; margin-top: 1rem; font-size: 1rem; }
-    button { margin-top: 1rem; font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: auto;
+      padding: 2rem;
+      text-align: center;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-top: 1rem;
+      font-size: 1rem;
+    }
+    button {
+      margin-top: 1rem;
+      padding: 0.5rem 1.2rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <h2>Confess Wall 🧱</h2>
+  <h2>🧱 Confess Wall (Irys Testnet)</h2>
   <button id="connect">Connect Wallet</button>
   <br />
   <textarea id="message" placeholder="Write your confession..."></textarea>
@@ -23,12 +39,13 @@
     import { ethers } from "https://esm.sh/ethers@5.7.2?bundle";
 
     let uploader;
+
     const connectBtn = document.getElementById("connect");
     const uploadBtn = document.getElementById("upload");
 
     connectBtn.onclick = async () => {
       if (!window.ethereum) {
-        alert("MetaMask not detected. Please install MetaMask.");
+        alert("MetaMask not detected. Please install it.");
         return;
       }
 
@@ -37,31 +54,42 @@
         await provider.send("wallet_addEthereumChain", [{
           chainId: "0x4f6",
           chainName: "Irys Testnet",
-          nativeCurrency: { name: "IRYS", symbol: "IRYS", decimals: 18 },
+          nativeCurrency: {
+            name: "IRYS",
+            symbol: "IRYS",
+            decimals: 18
+          },
           rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
           blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
         }]);
 
         await provider.send("eth_requestAccounts", []);
         uploader = await WebUploader(WebEthereum).withProvider(provider);
-        alert("✅ Wallet connected to Irys Testnet!");
-      } catch (err) {
-        console.error(err);
-        alert("❌ Failed to connect wallet.");
+        alert("✅ Wallet connected.");
+      } catch (e) {
+        console.error(e);
+        alert("❌ Failed to connect.");
       }
     };
 
     uploadBtn.onclick = async () => {
       const msg = document.getElementById("message").value;
-      if (!uploader) return alert("❗ Connect wallet first.");
-      if (!msg) return alert("✏️ Message is empty.");
+      if (!uploader) {
+        alert("❗ Connect your wallet first.");
+        return;
+      }
+
+      if (!msg.trim()) {
+        alert("✏️ Please enter a confession.");
+        return;
+      }
 
       try {
         const result = await uploader.upload(msg);
         const url = `https://gateway.irys.xyz/${result.id}`;
         alert("✅ Uploaded!\n" + url);
-      } catch (err) {
-        console.error(err);
+      } catch (e) {
+        console.error(e);
         alert("❌ Upload failed.");
       }
     };
