@@ -1,6 +1,7 @@
 let irys = null;
 
 async function connectWallet() {
+  console.log("Connecting...");
   if (!window.ethereum) {
     alert("MetaMask not found!");
     return;
@@ -10,7 +11,9 @@ async function connectWallet() {
   const address = accounts[0];
   document.querySelector("button").innerText = `✅ Connected: ${address.slice(0, 6)}...`;
 
-  // ✅ Correct usage for UMD global
+  console.log("Connected.");
+
+  // ✅ Init Irys using global class
   irys = new Irys({
     network: "devnet",
     token: "ethereum",
