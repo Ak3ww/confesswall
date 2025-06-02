@@ -1,10 +1,9 @@
-import { WebUploader } from "https://unpkg.com/@irys/web-upload@latest/dist/index.mjs";
-import { WebEthereum } from "https://unpkg.com/@irys/web-upload-ethereum@latest/dist/index.mjs";
+import { WebUploader } from "https://cdn.skypack.dev/@irys/web-upload";
+import { WebEthereum } from "https://cdn.skypack.dev/@irys/web-upload-ethereum";
 
 let irys = null;
 
-window.connectWallet = async function () {
-  console.log("🔌 Connecting...");
+async function connectWallet() {
   if (!window.ethereum) {
     alert("MetaMask not found!");
     return;
@@ -14,14 +13,14 @@ window.connectWallet = async function () {
   await provider.send("eth_requestAccounts", []);
   const signer = provider.getSigner();
   const address = await signer.getAddress();
-  document.querySelector("button").innerText = `✅ Connected: ${address.slice(0, 6)}...`;
+  document.getElementById("connectButton").innerText = `✅ ${address.slice(0, 6)}...`;
 
   irys = await WebUploader(WebEthereum).withProvider(provider);
-  console.log("✅ Connected to Irys", irys.address);
+  console.log("✅ Connected to Irys:", irys.address);
   document.getElementById("mainUI").style.display = "block";
-};
+}
 
-window.uploadConfession = async function () {
+async function uploadConfession() {
   if (!irys) {
     alert("Connect your wallet first!");
     return;
@@ -29,7 +28,7 @@ window.uploadConfession = async function () {
 
   const message = document.getElementById("confession").value.trim();
   if (!message) {
-    alert("Please type something to confess.");
+    alert("Write something to upload.");
     return;
   }
 
@@ -39,10 +38,14 @@ window.uploadConfession = async function () {
     });
 
     const link = `https://gateway.irys.xyz/${receipt.id}`;
-    document.getElementById("confessionLink").innerHTML = `✅ Uploaded! <br><a href="${link}" target="_blank">${link}</a>`;
+    document.getElementById("confessionLink").innerHTML =
+      `✅ Uploaded!<br><a href="${link}" target="_blank">${link}</a>`;
     document.getElementById("confession").value = "";
   } catch (err) {
     console.error(err);
     alert("Upload failed.");
   }
-};
+}
+
+document.getElementById("connectButton").addEventListener("click", connectWallet);
+document.getElementById("uploadButton").addEventListener("click", uploadConfession);
