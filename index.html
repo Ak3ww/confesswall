@@ -2,18 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Irys Testnet Uploader</title>
+  <title>Irys Confess Wall</title>
   <style>
-    body { font-family: sans-serif; max-width: 500px; margin: auto; padding: 2rem; }
+    body { font-family: sans-serif; max-width: 500px; margin: auto; padding: 2rem; text-align: center; }
     textarea { width: 100%; height: 120px; margin-top: 1rem; font-size: 1rem; }
-    button { margin-top: 1rem; font-size: 1rem; padding: 0.5rem 1rem; }
+    button { margin-top: 1rem; font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
   </style>
 </head>
 <body>
-  <h2>Connect + Upload to Irys Testnet</h2>
+  <h2>Confess Wall 🧱</h2>
   <button id="connect">Connect Wallet</button>
+  <br />
   <textarea id="message" placeholder="Write your confession..."></textarea>
-  <button id="upload">Upload</button>
+  <br />
+  <button id="upload">Upload Confession</button>
 
   <script type="module">
     import { WebUploader } from "https://esm.sh/@irys/web-upload@0.0.15";
@@ -25,6 +27,11 @@
     const uploadBtn = document.getElementById("upload");
 
     connectBtn.onclick = async () => {
+      if (!window.ethereum) {
+        alert("MetaMask not detected. Please install MetaMask.");
+        return;
+      }
+
       try {
         const provider = new ethers.providers.Web3Provider(window.ethereum);
         await provider.send("wallet_addEthereumChain", [{
@@ -52,7 +59,7 @@
       try {
         const result = await uploader.upload(msg);
         const url = `https://gateway.irys.xyz/${result.id}`;
-        alert("✅ Uploaded: " + url);
+        alert("✅ Uploaded!\n" + url);
       } catch (err) {
         console.error(err);
         alert("❌ Upload failed.");
