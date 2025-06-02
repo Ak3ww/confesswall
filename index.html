@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Irys Confess Wall</title>
+  <title>Confess Wall</title>
   <style>
     body {
       font-family: sans-serif;
+      text-align: center;
+      padding: 2rem;
       max-width: 600px;
       margin: auto;
-      padding: 2rem;
-      text-align: center;
     }
     textarea {
       width: 100%;
@@ -19,73 +19,65 @@
     }
     button {
       margin-top: 1rem;
-      padding: 0.5rem 1.2rem;
+      padding: 0.6rem 1.2rem;
       font-size: 1rem;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <h2>🧱 Confess Wall (Irys Testnet)</h2>
+  <h2>🧱 Confess Wall</h2>
   <button id="connect">Connect Wallet</button>
-  <br />
+  <br/>
   <textarea id="message" placeholder="Write your confession..."></textarea>
-  <br />
-  <button id="upload">Upload Confession</button>
+  <br/>
+  <button id="upload">Upload</button>
 
   <script type="module">
-    import { WebUploader } from "https://esm.sh/@irys/web-upload@0.0.15";
-    import { WebEthereum } from "https://esm.sh/@irys/web-upload-ethereum@0.0.16";
-    import { ethers } from "https://esm.sh/ethers@5.7.2?bundle";
+    import { WebUploader } from 'https://esm.sh/@irys/web-upload@0.0.15';
+    import { WebEthereum } from 'https://esm.sh/@irys/web-upload-ethereum@0.0.16';
+    import { ethers } from 'https://esm.sh/ethers@5.7.2';
 
     let uploader;
 
-    const connectBtn = document.getElementById("connect");
-    const uploadBtn = document.getElementById("upload");
-
-    connectBtn.onclick = async () => {
+    document.getElementById('connect').onclick = async () => {
       if (!window.ethereum) {
-        alert("MetaMask not detected. Please install it.");
+        alert("MetaMask not found.");
         return;
       }
 
-      try {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        await provider.send("wallet_addEthereumChain", [{
-          chainId: "0x4f6",
-          chainName: "Irys Testnet",
-          nativeCurrency: {
-            name: "IRYS",
-            symbol: "IRYS",
-            decimals: 18
-          },
-          rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
-          blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
-        }]);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("wallet_addEthereumChain", [{
+        chainId: "0x4f6", // 1270 decimal
+        chainName: "Irys Testnet",
+        nativeCurrency: {
+          name: "IRYS",
+          symbol: "IRYS",
+          decimals: 18
+        },
+        rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
+        blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
+      }]);
 
-        await provider.send("eth_requestAccounts", []);
-        uploader = await WebUploader(WebEthereum).withProvider(provider);
-        alert("✅ Wallet connected.");
-      } catch (e) {
-        console.error(e);
-        alert("❌ Failed to connect.");
-      }
+      await provider.send("eth_requestAccounts", []);
+      uploader = await WebUploader(WebEthereum).withProvider(provider);
+      alert("✅ Wallet connected.");
     };
 
-    uploadBtn.onclick = async () => {
-      const msg = document.getElementById("message").value;
+    document.getElementById('upload').onclick = async () => {
       if (!uploader) {
-        alert("❗ Connect your wallet first.");
+        alert("⚠️ Connect wallet first.");
         return;
       }
 
-      if (!msg.trim()) {
-        alert("✏️ Please enter a confession.");
+      const content = document.getElementById('message').value;
+      if (!content.trim()) {
+        alert("Please type a confession.");
         return;
       }
 
       try {
-        const result = await uploader.upload(msg);
+        const result = await uploader.upload(content);
         const url = `https://gateway.irys.xyz/${result.id}`;
         alert("✅ Uploaded!\n" + url);
       } catch (e) {
