@@ -2,77 +2,54 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Irys Confess Upload</title>
-  <style>
-    body { font-family: sans-serif; padding: 2rem; background: #f9f9f9; }
-    textarea { width: 100%; height: 120px; margin-bottom: 1rem; }
-    button { padding: 0.6rem 1.2rem; }
-  </style>
+  <title>Irys Testnet Upload</title>
 </head>
 <body>
-  <h1>Confess to Irys 🌿</h1>
-  <textarea id="message" placeholder="Write your confession here..."></textarea><br/>
-  <button id="upload">Connect & Upload</button>
-  <p id="status"></p>
-
+  <h1>Confess Wall</h1>
+  <button id="connect">Connect Wallet & Upload</button>
+  <textarea id="message" placeholder="Your confession..."></textarea>
   <script type="module">
     import { WebUploader } from "https://esm.sh/@irys/web-upload@0.0.15";
     import { WebEthereum } from "https://esm.sh/@irys/web-upload-ethereum@0.0.16";
     import { ethers } from "https://esm.sh/ethers@5.7.2";
 
-    const uploadBtn = document.getElementById("upload");
-    const status = document.getElementById("status");
+    const getIrysUploader = async () => {
+      // Connect to Irys Testnet RPC
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("wallet_addEthereumChain", [{
+        chainId: "0x4f6", // 1270 in hex
+        chainName: "Irys Testnet",
+        nativeCurrency: {
+          name: "IRYS",
+          symbol: "IRYS",
+          decimals: 18,
+        },
+        rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
+        blockExplorerUrls: ["https://testnet-explorer.irys.xyz"],
+      }]);
+      await provider.send("eth_requestAccounts", []);
+      const irys = await WebUploader(WebEthereum).withProvider(provider);
+      return irys;
+    };
 
-    const switchToIrysTestnet = async () => {
+    const uploadToIrys = async () => {
       try {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: "0x4F6", // 1270 in hex
-            chainName: "Irys Testnet",
-            rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
-            nativeCurrency: {
-              name: "IRYS",
-              symbol: "IRYS",
-              decimals: 18
-            },
-            blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
-          }]
-        });
+        const irys = await getIrysUploader();
+        const message = document.getElementById("message").value.trim();
+        if (!message) return alert("Message is empty");
+
+        console.log("Connected as:", irys.address);
+        const result = await irys.upload(message);
+        const url = `https://gateway.irys.xyz/${result.id}`;
+        console.log("Uploaded to:", url);
+        alert(`Success!\n${url}`);
       } catch (err) {
-        console.error("Network switch error", err);
+        console.error("Upload failed:", err);
+        alert("Upload failed. See console.");
       }
     };
 
-    const uploadConfession = async () => {
-      try {
-        if (!window.ethereum) throw new Error("MetaMask not found.");
-        await switchToIrysTestnet();
-
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        await provider.send("eth_requestAccounts", []);
-        const signer = provider.getSigner();
-
-        const irys = await WebUploader(WebEthereum).withProvider(provider, {
-          rpcUrl: "https://testnet-rpc.irys.xyz/v1/execution-rpc",
-          chainId: 1270,
-        });
-
-        const msg = document.getElementById("message").value.trim();
-        if (!msg) return alert("Please enter a confession!");
-
-        const result = await irys.upload(msg);
-        const url = `https://testnet-explorer.irys.xyz/${result.id}`;
-
-        status.innerHTML = `✅ Uploaded: <a href="${url}" target="_blank">${result.id}</a>`;
-        console.log("Upload complete:", result);
-      } catch (err) {
-        console.error(err);
-        status.textContent = "❌ Upload failed. See console.";
-      }
-    };
-
-    uploadBtn.onclick = uploadConfession;
+    document.getElementById("connect").onclick = uploadToIrys;
   </script>
 </body>
 </html>
