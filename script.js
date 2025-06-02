@@ -13,9 +13,15 @@ async function connectWallet() {
 
   console.log("Connected.");
 
-  // ✅ Init Irys using global `Irys` exposed by UMD
+  // ✅ FIX: ensure Irys is defined
+  if (typeof Irys === 'undefined') {
+    alert("Irys SDK not loaded.");
+    return;
+  }
+
+  // ✅ CORRECT network = testnet (not devnet)
   irys = new Irys({
-    network: "devnet",
+    network: "testnet",
     token: "ethereum",
     provider: window.ethereum,
   });
