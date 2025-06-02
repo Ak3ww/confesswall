@@ -10,10 +10,10 @@ async function connectWallet() {
   const address = accounts[0];
   document.querySelector("button").innerText = `✅ Connected: ${address.slice(0, 6)}...`;
 
-  // Init Irys
-  irys = await Irys.createIrys({
+  // Init Irys with UMD import
+  irys = new window.Irys.default({
     network: "devnet",
-    currency: "ethereum",
+    token: "ethereum",
     provider: window.ethereum,
   });
 
@@ -42,6 +42,6 @@ async function uploadConfession() {
     document.getElementById("confession").value = "";
   } catch (err) {
     console.error(err);
-    alert("Upload failed.");
+    alert("Upload failed. Check console.");
   }
 }
