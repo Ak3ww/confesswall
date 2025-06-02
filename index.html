@@ -2,12 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Irys Upload Dapp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ConfessWall</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Irys Upload Dapp (Ethereum)</h1>
-  <button id="connect">Connect & Upload</button>
+  <div class="container">
+    <h1>ConfessWall</h1>
+    <button id="connect">Connect Wallet</button>
+    <textarea id="confession" placeholder="Write your confession here..."></textarea>
+    <button id="upload">Upload Confession</button>
+    <div id="output"></div>
+  </div>
 
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
