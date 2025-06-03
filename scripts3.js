@@ -17,12 +17,11 @@ async function connectWallet() {
     await provider.send("eth_requestAccounts", []);
     const signer = provider.getSigner();
 
-    // Create uploader instance
-    uploader = await window.IrysWebUploader.WebUploader(
-      window.IrysWebUploader.WebEthereum
-    ).withSigner(signer);
+    // ✅ FIX: wrap the signer using WebEthereum constructor
+    const ethWallet = new window.IrysWebUploader.WebEthereum(provider);
 
-    // ✅ Update UI
+    uploader = await window.IrysWebUploader.WebUploader(ethWallet).ready();
+
     document.getElementById("connect").innerText = "✅ Connected";
     document.getElementById("connect").disabled = true;
 
