@@ -14,39 +14,40 @@ async function connectWallet() {
   ]);
 
   await provider.send("eth_requestAccounts", []);
+  const signer = provider.getSigner();
 
-  // Connect Irys uploader
   uploader = await window.IrysWebUploader.WebUploader(
     window.IrysWebUploader.WebEthereum
-  ).withProvider(provider);
+  ).withSigner(signer);
 
-  // Update UI
   document.getElementById("connect").innerText = "✅ Connected";
   document.getElementById("connect").disabled = true;
-  alert("Wallet connected to Irys Testnet!");
+  alert("Wallet connected!");
 }
 
 async function uploadMessage() {
   if (!uploader) {
-    alert("⚠️ Please connect your wallet first.");
+    alert("⚠️ Connect your wallet first.");
     return;
   }
 
   const message = document.getElementById("message").value.trim();
   if (!message) {
-    alert("✏️ Write a message first.");
+    alert("✏️ Please write something first.");
     return;
   }
 
   try {
-    const result = await uploader.upload(message);
-    const url = `https://gateway.irys.xyz/${result.id}`;
-    alert(`✅ Uploaded to Irys!\n${url}`);
+    const res = await uploader.upload(message);
+    const url = `https://gateway.irys.xyz/${res.id}`;
+    alert(`✅ Uploaded!\n${url}`);
   } catch (err) {
-    console.error("Upload error:", err);
+    console.error("Upload failed:", err);
     alert("❌ Upload failed.");
   }
 }
 
-document.getElementById("connect").onclick = connectWallet;
-document.getElementById("upload").onclick = uploadMessage;
+window.onload = () => {
+  document.getElementById("connect").onclick = connectWallet;
+  document.getElementById("upload").onclick = uploadMessage;
+};
