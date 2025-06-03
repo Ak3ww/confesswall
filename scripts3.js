@@ -6,9 +6,13 @@ async function connectWallet() {
 
     await provider.send("wallet_addEthereumChain", [
       {
-        chainId: "0x4f6", // 1270 in hex
+        chainId: "0x4f6", // 1270
         chainName: "Irys Testnet",
-        nativeCurrency: { name: "IRYS", symbol: "IRYS", decimals: 18 },
+        nativeCurrency: {
+          name: "IRYS",
+          symbol: "IRYS",
+          decimals: 18,
+        },
         rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
         blockExplorerUrls: ["https://testnet-explorer.irys.xyz"],
       },
@@ -17,8 +21,8 @@ async function connectWallet() {
     await provider.send("eth_requestAccounts", []);
     const signer = provider.getSigner();
 
-    // ✅ FIX: wrap the signer using WebEthereum constructor
-    const ethWallet = new window.IrysWebUploader.WebEthereum(provider);
+    // ✅ FIX: pass a function that returns signer
+    const ethWallet = new window.IrysWebUploader.WebEthereum(() => signer);
 
     uploader = await window.IrysWebUploader.WebUploader(ethWallet).ready();
 
