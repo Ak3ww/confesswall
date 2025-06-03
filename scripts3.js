@@ -1,7 +1,8 @@
-let uploader;
+let uploader = null;
 
-document.getElementById("connect").onclick = async () => {
+async function connectWallet() {
   const provider = new ethers.providers.Web3Provider(window.ethereum);
+
   await provider.send("wallet_addEthereumChain", [
     {
       chainId: "0x4f6", // 1270 in hex
@@ -13,23 +14,39 @@ document.getElementById("connect").onclick = async () => {
   ]);
 
   await provider.send("eth_requestAccounts", []);
+
+  // Connect Irys uploader
   uploader = await window.IrysWebUploader.WebUploader(
     window.IrysWebUploader.WebEthereum
   ).withProvider(provider);
 
-  alert("✅ Wallet connected to Irys Testnet");
-};
+  // Update UI
+  document.getElementById("connect").innerText = "✅ Connected";
+  document.getElementById("connect").disabled = true;
+  alert("Wallet connected to Irys Testnet!");
+}
 
-document.getElementById("upload").onclick = async () => {
-  if (!uploader) return alert("⚠️ Please connect wallet first.");
-  const msg = document.getElementById("message").value.trim();
-  if (!msg) return alert("✏️ Write something to upload.");
+async function uploadMessage() {
+  if (!uploader) {
+    alert("⚠️ Please connect your wallet first.");
+    return;
+  }
+
+  const message = document.getElementById("message").value.trim();
+  if (!message) {
+    alert("✏️ Write a message first.");
+    return;
+  }
 
   try {
-    const res = await uploader.upload(msg);
-    alert(`✅ Uploaded!\nhttps://gateway.irys.xyz/${res.id}`);
+    const result = await uploader.upload(message);
+    const url = `https://gateway.irys.xyz/${result.id}`;
+    alert(`✅ Uploaded to Irys!\n${url}`);
   } catch (err) {
-    console.error(err);
-    alert("❌ Upload failed. Check console for error.");
+    console.error("Upload error:", err);
+    alert("❌ Upload failed.");
   }
-};
+}
+
+document.getElementById("connect").onclick = connectWallet;
+document.getElementById("upload").onclick = uploadMessage;
