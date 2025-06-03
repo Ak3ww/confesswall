@@ -4,10 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Irys Uploader</title>
-  <!-- Load Ethers.js -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
-  <!-- Load Irys Web Uploader -->
-  <script src="https://upload.irys.xyz/web.bundle.min.js"></script>
+
+  <!-- Ethers.js -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+  <!-- Irys WebUploader (correct CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@irys/sdk@latest/dist/web.bundle.min.js"></script>
 </head>
 <body style="font-family: sans-serif; text-align: center; padding: 2rem;">
   <h1>Irys Testnet Uploader</h1>
@@ -20,7 +22,7 @@
 
   <button id="upload">Upload Message</button>
 
-  <!-- Your Script -->
+  <!-- Your custom script -->
   <script src="scripts3.js"></script>
 </body>
 </html>
