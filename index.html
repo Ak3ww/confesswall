@@ -2,18 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Irys Confession Wall</title>
-  <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@irys/sdk-web/dist/web.bundle.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Irys Uploader</title>
+  <!-- Load Ethers.js -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <!-- Load Irys Web Uploader -->
+  <script src="https://upload.irys.xyz/web.bundle.min.js"></script>
 </head>
-<body style="font-family:sans-serif;text-align:center;margin-top:40px">
-  <h1>💬 Confession Wall</h1>
-
-  <textarea id="message" rows="5" cols="50" placeholder="Write your confession..."></textarea><br><br>
+<body style="font-family: sans-serif; text-align: center; padding: 2rem;">
+  <h1>Irys Testnet Uploader</h1>
 
   <button id="connect">Connect Wallet</button>
-  <button id="upload">Upload to Irys</button>
+  <br/><br/>
 
+  <textarea id="message" rows="5" cols="40" placeholder="Write something..."></textarea>
+  <br/><br/>
+
+  <button id="upload">Upload Message</button>
+
+  <!-- Your Script -->
   <script src="scripts3.js"></script>
 </body>
 </html>
