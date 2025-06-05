@@ -1,45 +1,77 @@
-<script type="module">
-  import { WebEthereum, WebUploader } from "https://esm.sh/@irys/web-upload@0.0.15";
-  import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm";
-
-  let uploader;
-
-  async function connectWallet() {
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send("wallet_addEthereumChain", [{
-        chainId: "0x4f6",
-        chainName: "Irys Testnet",
-        nativeCurrency: { name: "IRYS", symbol: "IRYS", decimals: 18 },
-        rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
-        blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
-      }]);
-
-      await provider.send("eth_requestAccounts", []);
-      uploader = await WebUploader(WebEthereum).withProvider(provider);
-
-      document.getElementById("connect").innerText = "Connected ✅";
-      alert("Wallet connected to Irys Testnet!");
-    } catch (err) {
-      console.error("Connect error:", err);
-      alert("⚠️ Wallet connection failed.");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Irys Confession Wall</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2rem;
     }
-  }
-
-  async function uploadMessage() {
-    if (!uploader) return alert("⚠️ Connect your wallet first.");
-    const msg = document.getElementById("message").value.trim();
-    if (!msg) return alert("✏️ Write a message before uploading.");
-
-    try {
-      const res = await uploader.upload(msg);
-      alert(`✅ Uploaded!\nhttps://gateway.irys.xyz/${res.id}`);
-    } catch (err) {
-      console.error("Upload error:", err);
-      alert("❌ Upload failed. See console.");
+    textarea {
+      width: 90%;
+      max-width: 500px;
+      height: 100px;
+      margin-bottom: 1rem;
+      font-size: 1rem;
     }
-  }
+    button {
+      margin: 0.5rem;
+      padding: 0.7rem 1.5rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧱 Irys Confession Wall</h1>
+  <textarea id="message" placeholder="Write your confession here..."></textarea><br/>
+  <button id="connect">Connect Wallet</button>
+  <button id="upload">Upload Message</button>
 
-  document.getElementById("connect").onclick = connectWallet;
-  document.getElementById("upload").onclick = uploadMessage;
-</script>
+  <script type="module">
+    import { WebEthereum, WebUploader } from "https://esm.sh/@irys/web-upload@0.0.15";
+    import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm";
+
+    let uploader;
+
+    document.getElementById("connect").onclick = async () => {
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("wallet_addEthereumChain", [{
+          chainId: "0x4f6", // 1270
+          chainName: "Irys Testnet",
+          nativeCurrency: { name: "IRYS", symbol: "IRYS", decimals: 18 },
+          rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
+          blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
+        }]);
+
+        await provider.send("eth_requestAccounts", []);
+        uploader = await WebUploader(WebEthereum).withProvider(provider);
+
+        document.getElementById("connect").innerText = "Connected ✅";
+        alert("✅ Wallet connected to Irys Testnet");
+      } catch (err) {
+        console.error("Connect error:", err);
+        alert("❌ Wallet connection failed.");
+      }
+    };
+
+    document.getElementById("upload").onclick = async () => {
+      if (!uploader) return alert("⚠️ Please connect wallet first.");
+      const msg = document.getElementById("message").value.trim();
+      if (!msg) return alert("✏️ Write something to upload.");
+
+      try {
+        const res = await uploader.upload(msg);
+        alert(`✅ Uploaded!\nhttps://gateway.irys.xyz/${res.id}`);
+      } catch (err) {
+        console.error("Upload error:", err);
+        alert("❌ Upload failed. Check console for error.");
+      }
+    };
+  </script>
+</body>
+</html>
