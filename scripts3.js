@@ -7,12 +7,11 @@ async function connectWallet() {
       return;
     }
 
-    // Add Irys Testnet
     try {
       await window.ethereum.request({
         method: "wallet_addEthereumChain",
         params: [{
-          chainId: "0x4f6", // 1270
+          chainId: "0x4f6",
           chainName: "Irys Testnet",
           nativeCurrency: {
             name: "IRYS",
@@ -31,13 +30,14 @@ async function connectWallet() {
     await provider.send("eth_requestAccounts", []);
     const signer = provider.getSigner();
 
-    const ethWallet = new Irys.WebEthereum({
+    // ✅ Access Irys SDK from window
+    const ethWallet = new window.Irys.WebEthereum({
       name: "ethereum",
       provider,
       signer,
     });
 
-    uploader = await Irys.WebUploader(ethWallet).ready();
+    uploader = await window.Irys.WebUploader(ethWallet).ready();
 
     document.getElementById("connect").innerText = "✅ Connected";
     document.getElementById("connect").disabled = true;
