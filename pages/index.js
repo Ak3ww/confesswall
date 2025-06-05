@@ -4,120 +4,92 @@ import Irys from "@irys/sdk";
 
 export default function Home() {
   const [irys, setIrys] = useState(null);
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [confessions, setConfessions] = useState([]);
+  const [connected, setConnected] = useState(false);
+  const [confess, setConfess] = useState("");
+  const [uploadUrl, setUploadUrl] = useState("");
 
   const connectWallet = async () => {
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      const signer = await provider.getSigner();
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
 
-      // Add Irys Testnet chain
       try {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: "0x4f6", // 1270 hex
-              chainName: "Irys Testnet",
-              nativeCurrency: {
-                name: "IRYS",
-                symbol: "IRYS",
-                decimals: 18,
-              },
-              rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
-              blockExplorerUrls: ["https://testnet-explorer.irys.xyz"],
+        await provider.send("wallet_addEthereumChain", [
+          {
+            chainId: "0x4f6", // 1270 hex
+            chainName: "Irys Testnet",
+            nativeCurrency: {
+              name: "IRYS",
+              symbol: "IRYS",
+              decimals: 18,
             },
-          ],
-        });
+            rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
+            blockExplorerUrls: ["https://testnet-explorer.irys.xyz"],
+          },
+        ]);
       } catch (err) {
         console.warn("Could not add chain, maybe already added");
       }
 
+      await provider.send("eth_requestAccounts", []);
+
       const irysInstance = new Irys({
-        network: "testnet",
-        token: "ethereum",
-        wallet: signer,
+        network: "devnet",
+        chain: "ethereum",
+        signer,
       });
 
       await irysInstance.ready();
       setIrys(irysInstance);
-      setWalletConnected(true);
-      alert("✅ Connected to Irys Testnet");
+      setConnected(true);
     } catch (err) {
       console.error("Connect error:", err);
       alert("❌ Wallet connection failed.");
     }
   };
 
-  const handleUpload = async () => {
-    if (!walletConnected || !irys) {
-      alert("⚠️ Please connect wallet first.");
-      return;
-    }
-
-    const msg = document.getElementById("confessInput").value.trim();
-    if (!msg) {
-      alert("✏️ Write something to upload.");
-      return;
-    }
+  const uploadConfess = async () => {
+    if (!irys) return alert("⚠️ Please connect wallet first.");
+    if (!confess.trim()) return alert("✏️ Write your confession first.");
 
     try {
-      const tags = [{ name: "App", value: "IrysConfessionWall" }];
-      const receipt = await irys.upload(msg, { tags });
-
-      alert(`✅ Uploaded!\nhttps://gateway.irys.xyz/${receipt.id}`);
-      setConfessions((prev) => [
-        { id: receipt.id, data: msg },
-        ...prev,
-      ]);
+      const receipt = await irys.upload(confess.trim());
+      const url = `https://gateway.irys.xyz/${receipt.id}`;
+      setUploadUrl(url);
+      alert(`✅ Uploaded to Irys:\n${url}`);
     } catch (err) {
-      console.error("❌ Upload failed:", err);
-      alert("Upload failed. Check console.");
+      console.error("Upload failed:", err);
+      alert("❌ Upload failed.");
     }
   };
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+    <div style={{ padding: 40, fontFamily: "Arial" }}>
       <h1>🧱 Irys Confession Wall</h1>
+
       <textarea
-        id="confessInput"
-        rows="4"
-        cols="60"
+        rows={5}
+        cols={50}
         placeholder="Write your confession here..."
-        style={{ marginBottom: "1rem" }}
-      ></textarea>
+        value={confess}
+        onChange={(e) => setConfess(e.target.value)}
+        style={{ padding: 10 }}
+      />
+
       <br />
-      <button onClick={connectWallet} style={{ marginRight: "1rem" }}>
-        {walletConnected ? "Connected ✅" : "Connect Wallet"}
+      <button onClick={connectWallet} style={{ margin: "10px", padding: "10px 20px" }}>
+        {connected ? "✅ Wallet Connected" : "Connect Wallet"}
       </button>
-      <button onClick={handleUpload}>Upload Confession</button>
 
-      <hr style={{ margin: "2rem 0" }} />
+      <button onClick={uploadConfess} style={{ margin: "10px", padding: "10px 20px" }}>
+        Upload Confession
+      </button>
 
-      <h2>📝 Recent Confessions</h2>
-      {confessions.length === 0 && <p>No confessions yet...</p>}
-      {confessions.map((c) => (
-        <div
-          key={c.id}
-          style={{
-            marginBottom: "1rem",
-            padding: "1rem",
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-          }}
-        >
-          <p>{c.data}</p>
-          <a
-            href={`https://gateway.irys.xyz/${c.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View on Irys
-          </a>
+      {uploadUrl && (
+        <div style={{ marginTop: 20 }}>
+          <strong>📎 Uploaded:</strong> <a href={uploadUrl} target="_blank">{uploadUrl}</a>
         </div>
-      ))}
+      )}
     </div>
   );
 }
