@@ -30,7 +30,6 @@ async function connectWallet() {
     await provider.send("eth_requestAccounts", []);
     const signer = provider.getSigner();
 
-    // ✅ Access Irys SDK from window
     const ethWallet = new window.Irys.WebEthereum({
       name: "ethereum",
       provider,
