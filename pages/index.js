@@ -1,67 +1,103 @@
-import { useState } from "react";
-import { ethers } from "ethers";
+import { useState } from 'react';
+import { ethers } from 'ethers';
 
 export default function Home() {
-  const [message, setMessage] = useState("");
-  const [irys, setIrys] = useState(null);
+  const [provider, setProvider] = useState(null);
+  const [walletAddress, setWalletAddress] = useState(null);
+  const [message, setMessage] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const connectWallet = async () => {
+    if (!window.ethereum) {
+      alert("Please install MetaMask.");
+      return;
+    }
+
     try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-
-      await provider.send("wallet_addEthereumChain", [{
-        chainId: "0x4f6",
-        chainName: "Irys Testnet",
-        nativeCurrency: { name: "IRYS", symbol: "IRYS", decimals: 18 },
-        rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
-        blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
-      }]);
-
-      await provider.send("eth_requestAccounts", []);
-      const signer = provider.getSigner();
-
-      const irysInstance = new window.Irys({
-        url: "https://testnet.irys.xyz",
-        token: "irys",
-        provider: signer,
+      const chainId = "0x4f6"; // 1270 in hex
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId,
+          chainName: "Irys Testnet",
+          nativeCurrency: {
+            name: "IRYS",
+            symbol: "IRYS",
+            decimals: 18
+          },
+          rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
+          blockExplorerUrls: ["https://testnet-explorer.irys.xyz"]
+        }]
       });
-
-      await irysInstance.ready();
-      setIrys(irysInstance);
-      alert("✅ Wallet connected: " + irysInstance.address);
     } catch (err) {
-      console.error("Connection error:", err);
-      alert("⚠️ Could not connect wallet.");
+      console.log("Chain add error:", err.message);
+    }
+
+    try {
+      const _provider = new ethers.providers.Web3Provider(window.ethereum);
+      await _provider.send("eth_requestAccounts", []);
+      const signer = _provider.getSigner();
+      const address = await signer.getAddress();
+      setProvider(_provider);
+      setWalletAddress(address);
+    } catch (err) {
+      console.error("Connect error:", err);
     }
   };
 
-  const uploadMessage = async () => {
-    if (!irys) return alert("⚠️ Connect your wallet first.");
-    if (!message.trim()) return alert("✏️ Write something first.");
+  const uploadConfession = async () => {
+    if (!provider || !walletAddress) {
+      alert("⚠️ Please connect wallet first.");
+      return;
+    }
+
+    if (!message.trim()) {
+      alert("✏️ Write something to upload.");
+      return;
+    }
+
+    setUploading(true);
 
     try {
-      const res = await irys.upload(message.trim());
-      alert("✅ Uploaded: https://gateway.irys.xyz/" + res.id);
+      const tx = await provider.getSigner().sendTransaction({
+        to: walletAddress, // dummy tx
+        value: ethers.utils.parseEther("0.00001")
+      });
+
+      await tx.wait();
+
+      alert(`✅ Uploaded: ${message}`);
     } catch (err) {
       console.error("Upload error:", err);
-      alert("❌ Upload failed.");
+      alert("❌ Upload failed. Check console.");
     }
+
+    setUploading(false);
   };
 
   return (
-    <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
+    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
       <h1>🧱 Irys Confession Wall</h1>
+      <p>
+        {walletAddress
+          ? `✅ Connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+          : "❌ Not connected"}
+      </p>
+      <button onClick={connectWallet} style={{ marginRight: "10px" }}>
+        {walletAddress ? "Connected" : "Connect Wallet"}
+      </button>
+      <br /><br />
       <textarea
-        rows={4}
+        rows={5}
         cols={50}
-        placeholder="Write your confession..."
         value={message}
-        onChange={(e) => setMessage(e.target.value)}
+        onChange={e => setMessage(e.target.value)}
+        placeholder="Write your confession..."
       />
       <br />
-      <button onClick={connectWallet}>Connect Wallet</button>
-      <button onClick={uploadMessage}>Upload</button>
-      <script src="https://cdn.jsdelivr.net/gh/irysxyz/web-sdk@main/dist/web.bundle.min.js"></script>
+      <button onClick={uploadConfession} disabled={uploading}>
+        {uploading ? "Uploading..." : "Upload Confession"}
+      </button>
     </div>
   );
 }
