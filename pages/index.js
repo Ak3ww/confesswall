@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ethers } from 'ethers'
-import { bundlrStorageDriver } from '@irys/sdk'
+import { WebIrys } from '@irys/sdk'
 
 export default function Home() {
   const [provider, setProvider] = useState(null)
@@ -12,11 +12,11 @@ export default function Home() {
 
   const IRYS_RPC = 'https://testnet-rpc.irys.xyz/v1/execution-rpc'
   const IRYS_CHAIN = {
-    chainId: '0x14A34', // 84020
-    chainName: 'Irys Testnet',
-    nativeCurrency: { name: 'tIRYS', symbol: 'tIRYS', decimals: 18 },
+    chainId: '0x4F6', // 1270
+    chainName: 'Irys Testnet v1',
+    nativeCurrency: { name: 'IRYS', symbol: 'IRYS', decimals: 18 },
     rpcUrls: [IRYS_RPC],
-    blockExplorerUrls: ['https://explorer.irys.xyz']
+    blockExplorerUrls: ['https://testnet-explorer.irys.xyz']
   }
 
   const connectWallet = async () => {
@@ -43,13 +43,13 @@ export default function Home() {
       setWalletAddress(address)
       setStatus('Wallet connected')
 
-      const irysDriver = await bundlrStorageDriver({
-        provider: window.ethereum,
-        network: 'ethereum',
-        rpcUrl: IRYS_RPC
+      const irysInstance = new WebIrys({
+        network: 'irysTestnet', // Must match Irys-supported name
+        ethereumProvider: window.ethereum
       })
 
-      setIrys(irysDriver)
+      await irysInstance.ready()
+      setIrys(irysInstance)
     } catch (err) {
       console.error('Connect error:', err)
       setStatus('Connection failed')
@@ -60,12 +60,15 @@ export default function Home() {
     if (!irys || !walletAddress) return setStatus('Connect wallet first')
 
     try {
-      const tx = await irys.upload(JSON.stringify({ confession }))
-      setStatus(`Confession uploaded: ${tx.id}`)
+      const tx = await irys.upload(JSON.stringify({ confession }), {
+        tags: [{ name: 'Content-Type', value: 'application/json' }]
+      })
+
+      setStatus(`✅ Uploaded! ID: ${tx.id}`)
       setConfession('')
     } catch (err) {
       console.error('Upload error:', err)
-      setStatus('Upload failed')
+      setStatus('Upload failed ❌')
     }
   }
 
