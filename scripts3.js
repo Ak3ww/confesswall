@@ -3,11 +3,11 @@ let uploader = null;
 async function connectWallet() {
   try {
     if (!window.ethereum) {
-      alert("Please install MetaMask to use this dApp.");
+      alert("Please install MetaMask.");
       return;
     }
 
-    // Safely add or switch to Irys Testnet
+    // Try to switch or add Irys Testnet
     try {
       await window.ethereum.request({
         method: "wallet_addEthereumChain",
@@ -23,16 +23,8 @@ async function connectWallet() {
           blockExplorerUrls: ["https://testnet-explorer.irys.xyz"],
         }],
       });
-    } catch (addError) {
-      // Fallback to switch if chain already exists
-      if (addError.code === -32603 || addError.code === 4902) {
-        await window.ethereum.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: "0x4f6" }],
-        });
-      } else {
-        throw addError;
-      }
+    } catch (err) {
+      console.warn("Could not add chain, maybe it's already added");
     }
 
     const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -49,8 +41,8 @@ async function connectWallet() {
 
     document.getElementById("connect").innerText = "✅ Connected";
     document.getElementById("connect").disabled = true;
-    alert("Wallet connected!");
 
+    alert("✅ Wallet connected!");
   } catch (err) {
     console.error("Connect error:", err);
     alert("❌ Wallet connection failed.");
@@ -58,30 +50,25 @@ async function connectWallet() {
 }
 
 async function uploadMessage() {
-  const message = document.getElementById("message").value.trim();
-
   if (!uploader) {
-    alert("Please connect your wallet first.");
+    alert("⚠️ Please connect wallet first.");
     return;
   }
 
-  if (!message) {
-    alert("Please enter a message to upload.");
+  const msg = document.getElementById("message").value.trim();
+  if (!msg) {
+    alert("✏️ Write something to upload.");
     return;
   }
 
   try {
-    const tags = [{ name: "App", value: "IrysConfessionWall" }];
-    const receipt = await uploader.upload(message, { tags });
-
-    alert("✅ Message uploaded! TX ID: " + receipt.id);
-    console.log("Uploaded to Irys:", receipt);
+    const result = await uploader.upload(msg);
+    alert(`✅ Uploaded!\nhttps://gateway.irys.xyz/${result.id}`);
   } catch (err) {
     console.error("Upload failed:", err);
-    alert("❌ Upload failed. See console for details.");
+    alert("❌ Upload failed. Check console.");
   }
 }
 
-// Event bindings
-document.getElementById("connect").addEventListener("click", connectWallet);
-document.getElementById("upload").addEventListener("click", uploadMessage);
+document.getElementById("connect").onclick = connectWallet;
+document.getElementById("upload").onclick = uploadMessage;
