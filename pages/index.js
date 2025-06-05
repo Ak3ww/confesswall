@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
 export default function Home() {
@@ -6,6 +6,11 @@ export default function Home() {
   const [walletAddress, setWalletAddress] = useState(null);
   const [message, setMessage] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [confessions, setConfessions] = useState([]);
+
+  useEffect(() => {
+    fetchConfessions();
+  }, []);
 
   const connectWallet = async () => {
     if (!window.ethereum) {
@@ -67,12 +72,20 @@ export default function Home() {
       await tx.wait();
 
       alert(`✅ Uploaded: ${message}`);
+      setMessage('');
+      fetchConfessions(); // Refresh the feed
     } catch (err) {
       console.error("Upload error:", err);
       alert("❌ Upload failed. Check console.");
     }
 
     setUploading(false);
+  };
+
+  const fetchConfessions = async () => {
+    // Placeholder for fetching confessions from Irys
+    // Implement GraphQL query to fetch transactions with specific tags
+    // and update the confessions state
   };
 
   return (
@@ -98,6 +111,15 @@ export default function Home() {
       <button onClick={uploadConfession} disabled={uploading}>
         {uploading ? "Uploading..." : "Upload Confession"}
       </button>
+
+      <h2>Recent Confessions</h2>
+      <ul>
+        {confessions.map((confession, index) => (
+          <li key={index}>
+            <strong>{confession.address}</strong>: {confession.message}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
