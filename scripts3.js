@@ -3,11 +3,11 @@ let uploader = null;
 async function connectWallet() {
   try {
     if (!window.ethereum) {
-      alert("Please install MetaMask.");
+      alert("MetaMask not found.");
       return;
     }
 
-    // Try to switch or add Irys Testnet
+    // Add Irys Testnet
     try {
       await window.ethereum.request({
         method: "wallet_addEthereumChain",
@@ -21,7 +21,7 @@ async function connectWallet() {
           },
           rpcUrls: ["https://testnet-rpc.irys.xyz/v1/execution-rpc"],
           blockExplorerUrls: ["https://testnet-explorer.irys.xyz"],
-        }],
+        }]
       });
     } catch (err) {
       console.warn("Could not add chain, maybe it's already added");
@@ -31,18 +31,18 @@ async function connectWallet() {
     await provider.send("eth_requestAccounts", []);
     const signer = provider.getSigner();
 
-    const ethWallet = new IrysWebUploader.WebEthereum({
+    const ethWallet = new Irys.WebEthereum({
       name: "ethereum",
       provider,
       signer,
     });
 
-    uploader = await IrysWebUploader.WebUploader(ethWallet).ready();
+    uploader = await Irys.WebUploader(ethWallet).ready();
 
     document.getElementById("connect").innerText = "✅ Connected";
     document.getElementById("connect").disabled = true;
 
-    alert("✅ Wallet connected!");
+    alert("✅ Wallet connected to Irys!");
   } catch (err) {
     console.error("Connect error:", err);
     alert("❌ Wallet connection failed.");
@@ -66,7 +66,7 @@ async function uploadMessage() {
     alert(`✅ Uploaded!\nhttps://gateway.irys.xyz/${result.id}`);
   } catch (err) {
     console.error("Upload failed:", err);
-    alert("❌ Upload failed. Check console.");
+    alert("❌ Upload failed. See console.");
   }
 }
 
