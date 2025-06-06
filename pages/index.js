@@ -12,6 +12,7 @@ export default function Home() {
   const [uploadText, setUploadText] = useState("");
   const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
+  const [myOnly, setMyOnly] = useState(false);
 
   const connectWallet = async () => {
     try {
@@ -23,6 +24,8 @@ export default function Home() {
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
+      await fetchFeed(userAddress);
+      subscribeToChanges();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -34,12 +37,10 @@ export default function Home() {
     setIrysUploader(null);
     setUploadResult("");
     setFeed([]);
+    setMyOnly(false);
   };
 
-  const encryptConfession = (plaintext) => {
-    return btoa(plaintext); // For demo only
-  };
-
+  const encryptConfession = (plaintext) => btoa(plaintext);
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
@@ -52,7 +53,6 @@ export default function Home() {
     if (!uploadText || !irysUploader) return;
 
     const encrypted = encryptConfession(uploadText);
-
     try {
       const receipt = await irysUploader.upload(encrypted);
       const tx_id = receipt.id;
@@ -63,16 +63,6 @@ export default function Home() {
         address,
       });
 
-      const newItem = {
-        tx_id,
-        encrypted,
-        address,
-        text: decryptConfession(encrypted),
-      };
-
-      // Inject to top of feed locally (for uploader)
-      setFeed((prev) => [newItem, ...prev]);
-
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
     } catch (e) {
@@ -81,13 +71,18 @@ export default function Home() {
     }
   };
 
-  const fetchFeed = async () => {
-    const { data, error } = await supabase
+  const fetchFeed = async (userAddr = address) => {
+    let query = supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
       .order("created_at", { ascending: false })
       .limit(10);
 
+    if (myOnly && userAddr) {
+      query = query.eq("address", userAddr);
+    }
+
+    const { data, error } = await query;
     if (error) {
       console.error("Failed to fetch feed:", error);
       return;
@@ -101,32 +96,27 @@ export default function Home() {
     setFeed(formatted);
   };
 
-  useEffect(() => {
-    if (!connected) return;
+  const deleteConfession = async (tx_id) => {
+    const { error } = await supabase.from("confessions").delete().eq("tx_id", tx_id);
+    if (error) {
+      console.error("Delete failed:", error);
+    }
+  };
 
-    fetchFeed();
-
-    const subscription = supabase
-      .channel("confessions-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "confessions" },
-        (payload) => {
-          const { tx_id, encrypted, address } = payload.new;
-          const text = decryptConfession(encrypted);
-
-          setFeed((prev) => {
-            if (prev.some((item) => item.tx_id === tx_id)) return prev;
-            return [{ tx_id, encrypted, address, text }, ...prev];
-          });
-        }
-      )
+  const subscribeToChanges = () => {
+    supabase
+      .channel("confession_feed")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, () => {
+        fetchFeed();
+      })
       .subscribe();
+  };
 
-    return () => {
-      supabase.removeChannel(subscription);
-    };
-  }, [connected]);
+  useEffect(() => {
+    if (connected) {
+      fetchFeed();
+    }
+  }, [connected, myOnly]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -136,9 +126,7 @@ export default function Home() {
         <button onClick={connectWallet}>Connect Wallet</button>
       ) : (
         <div>
-          <p>
-            Connected: {address.slice(0, 6)}...{address.slice(-4)}
-          </p>
+          <p>Connected: {address.slice(0, 6)}...{address.slice(-4)}</p>
           <button onClick={disconnectWallet}>Disconnect</button>
 
           <div style={{ marginTop: "1rem" }}>
@@ -151,29 +139,41 @@ export default function Home() {
               style={{ display: "block", width: "100%", marginBottom: "1rem" }}
             />
             <button onClick={uploadData}>Upload</button>
-            {uploadResult && (
-              <p style={{ marginTop: "1rem" }}>{uploadResult}</p>
-            )}
+            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
+          </div>
+
+          <div style={{ marginTop: "2rem" }}>
+            <button onClick={() => setMyOnly(!myOnly)}>
+              {myOnly ? "🔁 Back to Global Feed" : "👤 View My Confessions"}
+            </button>
           </div>
 
           <section style={{ marginTop: "2rem" }}>
-            <h2>Latest Confessions</h2>
+            <h2>{myOnly ? "My Confessions" : "Latest Confessions"}</h2>
             {feed.length === 0 ? (
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div
-                  key={item.tx_id}
-                  style={{
-                    marginBottom: "1rem",
-                    padding: "1rem",
-                    border: "1px solid #ccc",
-                  }}
-                >
+                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
                   <p style={{ fontSize: "0.9rem", color: "#555" }}>
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
+                  {item.address === address && (
+                    <button
+                      onClick={() => deleteConfession(item.tx_id)}
+                      style={{
+                        marginTop: "0.5rem",
+                        background: "#ff4d4f",
+                        color: "white",
+                        border: "none",
+                        padding: "0.25rem 0.5rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      🗑️ Delete
+                    </button>
+                  )}
                 </div>
               ))
             )}
