@@ -95,10 +95,10 @@ export default function Home() {
   let subscription;
 
   const setupRealtime = async () => {
-    await fetchFeed(); // initial fetch
+    await fetchFeed(); // ensure the initial feed loads once
 
     subscription = supabase
-      .channel("confession-feed")
+      .channel("confessions-realtime")
       .on(
         "postgres_changes",
         {
@@ -111,10 +111,18 @@ export default function Home() {
           const text = decryptConfession(encrypted);
           const newItem = { tx_id, encrypted, address, text };
 
-          setFeed((prev) => [newItem, ...prev]); // push live instantly
+          setFeed((prev) => {
+            // Avoid duplicate push if same tx already shown
+            if (prev.some((item) => item.tx_id === tx_id)) return prev;
+            return [newItem, ...prev];
+          });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status !== "SUBSCRIBED") {
+          console.warn("Supabase subscription failed:", status);
+        }
+      });
   };
 
   if (connected) {
@@ -122,7 +130,9 @@ export default function Home() {
   }
 
   return () => {
-    if (subscription) supabase.removeChannel(subscription);
+    if (subscription) {
+      supabase.removeChannel(subscription);
+    }
   };
 }, [connected]);
 
