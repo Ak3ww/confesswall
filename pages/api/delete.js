@@ -1,5 +1,5 @@
 import { supabase } from "../../lib/supabaseClient";
-import { ethers } from "ethers";
+import { verifyMessage } from "ethers";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   try {
     const message = `Delete Confession with tx_id: ${tx_id}`;
-    const recoveredAddress = ethers.verifyMessage(message, signature);
+    const recoveredAddress = await verifyMessage(message, signature);
 
     if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
       return res.status(401).json({ error: "Invalid signature" });
@@ -32,6 +32,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true });
   } catch (err) {
+    console.error("Delete error:", err);
     return res.status(500).json({ error: err.message });
   }
 }
