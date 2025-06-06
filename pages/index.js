@@ -12,20 +12,19 @@ export default function Home() {
   const [uploadText, setUploadText] = useState("");
   const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
-  const [viewProfile, setViewProfile] = useState(null);
+  const [myFeed, setMyFeed] = useState([]);
+  const [view, setView] = useState("global");
 
-  // Connect wallet and init Irys
   const connectWallet = async () => {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const userAddress = (await signer.getAddress()).toLowerCase();
       const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
+      const userAddress = await signer.getAddress();
 
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
-      setViewProfile(null);
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -37,11 +36,11 @@ export default function Home() {
     setIrysUploader(null);
     setUploadResult("");
     setFeed([]);
-    setViewProfile(null);
+    setMyFeed([]);
   };
 
   const encryptConfession = (plaintext) => {
-    return btoa(plaintext); // 🔐 Replace with stronger encryption for production
+    return btoa(plaintext);
   };
 
   const decryptConfession = (encrypted) => {
@@ -54,6 +53,7 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
+
     const encrypted = encryptConfession(uploadText);
 
     try {
@@ -63,7 +63,7 @@ export default function Home() {
       await supabase.from("confessions").insert({
         tx_id,
         encrypted,
-        address: address.toLowerCase(),
+        address,
       });
 
       setUploadResult("✅ Uploaded anonymously");
@@ -74,21 +74,43 @@ export default function Home() {
     }
   };
 
-  const fetchFeed = async (filterAddress = null) => {
-    const query = supabase
+  const deleteConfession = async (tx_id) => {
+    const { error } = await supabase
+      .from("confessions")
+      .delete()
+      .eq("tx_id", tx_id)
+      .eq("address", address);
+
+    if (error) console.error("Delete failed:", error);
+  };
+
+  useEffect(() => {
+    if (!connected) return;
+
+    const globalSub = supabase
+      .channel("global-confessions")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, (payload) => {
+        fetchFeed();
+        fetchMyFeed();
+      })
+      .subscribe();
+
+    fetchFeed();
+    fetchMyFeed();
+
+    return () => {
+      supabase.removeChannel(globalSub);
+    };
+  }, [connected]);
+
+  const fetchFeed = async () => {
+    const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
       .order("created_at", { ascending: false })
-      .limit(30);
+      .limit(10);
 
-    if (filterAddress) query.eq("address", filterAddress.toLowerCase());
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Failed to fetch feed:", error);
-      return;
-    }
+    if (error) return console.error("Failed to fetch feed:", error);
 
     const formatted = data.map((item) => ({
       ...item,
@@ -98,44 +120,21 @@ export default function Home() {
     setFeed(formatted);
   };
 
-  const deleteConfession = async (tx_id) => {
-    const { error } = await supabase
+  const fetchMyFeed = async () => {
+    const { data, error } = await supabase
       .from("confessions")
-      .delete()
-      .eq("tx_id", tx_id)
-      .eq("address", address.toLowerCase());
+      .select("tx_id, encrypted, address")
+      .eq("address", address)
+      .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Failed to delete:", error);
-    }
-  };
+    if (error) return console.error("Failed to fetch profile feed:", error);
 
-  // Realtime subscription
-  useEffect(() => {
-    if (!connected) return;
+    const formatted = data.map((item) => ({
+      ...item,
+      text: decryptConfession(item.encrypted),
+    }));
 
-    fetchFeed();
-
-    const sub = supabase
-      .channel("confessions-feed")
-      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, (payload) => {
-        fetchFeed(viewProfile);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(sub);
-    };
-  }, [connected, viewProfile]);
-
-  const showGlobalFeed = () => {
-    setViewProfile(null);
-    fetchFeed();
-  };
-
-  const showProfile = (userAddr) => {
-    setViewProfile(userAddr);
-    fetchFeed(userAddr);
+    setMyFeed(formatted);
   };
 
   return (
@@ -145,15 +144,12 @@ export default function Home() {
       {!connected ? (
         <button onClick={connectWallet}>Connect Wallet</button>
       ) : (
-        <div>
+        <>
           <p>
             Connected:{" "}
-            <span
-              onClick={() => showProfile(address)}
-              style={{ textDecoration: "underline", cursor: "pointer", color: "blue" }}
-            >
+            <a href="#" onClick={() => setView("profile")}>
               {address.slice(0, 6)}...{address.slice(-4)}
-            </span>
+            </a>
           </p>
           <button onClick={disconnectWallet}>Disconnect</button>
 
@@ -167,69 +163,45 @@ export default function Home() {
               style={{ display: "block", width: "100%", marginBottom: "1rem" }}
             />
             <button onClick={uploadData}>Upload</button>
-            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
+            {uploadResult && <p>{uploadResult}</p>}
           </div>
 
-          <section style={{ marginTop: "2rem" }}>
-            <h2>
-              {viewProfile
-                ? viewProfile.toLowerCase() === address.toLowerCase()
-                  ? "📁 My Confessions"
-                  : `👀 Viewing: ${viewProfile.slice(0, 6)}...${viewProfile.slice(-4)}`
-                : "🌍 Global Confessions"}
-            </h2>
-            {viewProfile && (
-              <p>
-                <button onClick={showGlobalFeed}>← Back to Global Feed</button>
-              </p>
-            )}
-            {feed.length === 0 ? (
-              <p>No confessions yet.</p>
-            ) : (
-              feed.map((item) => (
-                <div
-                  key={item.tx_id}
-                  style={{
-                    marginBottom: "1rem",
-                    padding: "1rem",
-                    border: "1px solid #ccc",
-                    position: "relative",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "0.9rem",
-                      color: "#555",
-                      cursor: "pointer",
-                      textDecoration: "underline",
-                    }}
-                    onClick={() => showProfile(item.address)}
-                  >
+          <div style={{ marginTop: "2rem" }}>
+            <button onClick={() => setView("global")}>🌍 Global Feed</button>
+            <button onClick={() => setView("profile")}>👤 My Confessions</button>
+          </div>
+
+          {view === "global" ? (
+            <section style={{ marginTop: "2rem" }}>
+              <h2>Latest Confessions</h2>
+              {feed.map((item) => (
+                <div key={item.tx_id} style={{ border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem" }}>
+                  <a href={`/profile/${item.address}`}>
+                    <p style={{ fontSize: "0.9rem", color: "#555" }}>
+                      {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                    </p>
+                  </a>
+                  <p>{item.text}</p>
+                </div>
+              ))}
+            </section>
+          ) : (
+            <section style={{ marginTop: "2rem" }}>
+              <h2>My Confessions</h2>
+              {myFeed.map((item) => (
+                <div key={item.tx_id} style={{ border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem" }}>
+                  <p style={{ fontSize: "0.9rem", color: "#555" }}>
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
-                  <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-                  {item.address.toLowerCase() === address.toLowerCase() && (
-                    <button
-                      onClick={() => deleteConfession(item.tx_id)}
-                      style={{
-                        position: "absolute",
-                        top: "1rem",
-                        right: "1rem",
-                        background: "#f55",
-                        color: "white",
-                        border: "none",
-                        padding: "0.3rem 0.6rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
+                  <p>{item.text}</p>
+                  <button onClick={() => deleteConfession(item.tx_id)} style={{ marginTop: "0.5rem" }}>
+                    ❌ Delete
+                  </button>
                 </div>
-              ))
-            )}
-          </section>
-        </div>
+              ))}
+            </section>
+          )}
+        </>
       )}
     </main>
   );
