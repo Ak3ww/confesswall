@@ -1,87 +1,71 @@
 import { useState } from 'react'
 import { ethers } from 'ethers'
-import { WebIrys } from '@irys/sdk'
+import { Uploader } from '@irys/upload'
+import { Ethereum } from '@irys/upload-ethereum'
 
 export default function Home() {
-  const [walletAddress, setWalletAddress] = useState('')
   const [status, setStatus] = useState('')
   const [confession, setConfession] = useState('')
+  const [walletAddress, setWalletAddress] = useState(null)
   const [irys, setIrys] = useState(null)
-
-  const IRYS_CHAIN = {
-    chainId: '0x4F6', // 1270 in hex
-    chainName: 'Irys Testnet',
-    nativeCurrency: {
-      name: 'tIRYS',
-      symbol: 'tIRYS',
-      decimals: 18
-    },
-    rpcUrls: ['https://testnet-rpc.irys.xyz/v1/execution-rpc'],
-    blockExplorerUrls: ['https://testnet-explorer.irys.xyz']
-  }
 
   const connectWallet = async () => {
     try {
-      if (!window.ethereum) return alert('MetaMask not found.')
-
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
-
-      try {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [IRYS_CHAIN]
-        })
-      } catch {
-        console.log('Could not add chain, maybe already added')
+      if (!window.ethereum) {
+        setStatus('MetaMask not installed')
+        return
       }
 
+      await window.ethereum.request({ method: 'eth_requestAccounts' })
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
       const address = await signer.getAddress()
+
       setWalletAddress(address)
-      setStatus('Wallet connected')
+      setStatus(`Connected: ${address}`)
 
-      const irysInstance = new WebIrys({
-        url: 'https://devnet.irys.xyz', // use devnet for testnet interactions
-        provider: window.ethereum,
-        token: 'ethereum'
-      })
+      const bundler = await Uploader(Ethereum)
+        .withProvider(window.ethereum)
+        .withRpc('https://testnet-rpc.irys.xyz/v1/execution-rpc') // Devnet RPC
+        .devnet()
 
-      await irysInstance.ready()
-      setIrys(irysInstance)
+      setIrys(bundler)
     } catch (err) {
       console.error('Connect error:', err)
-      setStatus('Connection failed')
+      setStatus('Wallet connection failed')
     }
   }
 
   const uploadConfession = async () => {
-    if (!irys) return setStatus('Please connect wallet first')
+    if (!irys || !walletAddress) {
+      setStatus('Connect wallet first')
+      return
+    }
 
     try {
-      const data = JSON.stringify({ confession })
-      const res = await irys.upload(data, { tags: [{ name: 'App', value: 'IrysConfessionWall' }] })
-      setStatus(`✅ Uploaded: ${res.id}`)
+      const res = await irys.upload(JSON.stringify({ confession }))
+      setStatus(`Confession uploaded: ${res.id}`)
       setConfession('')
     } catch (err) {
       console.error('Upload error:', err)
-      setStatus('❌ Upload failed')
+      setStatus('Upload failed')
     }
   }
 
   return (
-    <div style={{ padding: 40 }}>
+    <div style={{ padding: '2rem' }}>
       <h1>Irys Confession Wall</h1>
-      <p>Status: {status}</p>
       <button onClick={connectWallet}>Connect Wallet</button>
-      {walletAddress && <p>Connected: {walletAddress}</p>}
+      <p>Status: {status}</p>
+
       <textarea
         value={confession}
         onChange={(e) => setConfession(e.target.value)}
-        placeholder="Write your confession..."
-        style={{ width: '100%', height: 100, marginTop: 20 }}
+        placeholder="Write your confession here..."
+        style={{ width: '100%', height: '100px', marginTop: '20px' }}
       />
-      <button onClick={uploadConfession} style={{ marginTop: 10 }}>
+      <br />
+      <button onClick={uploadConfession} style={{ marginTop: '10px' }}>
         Upload Confession
       </button>
     </div>
