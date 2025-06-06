@@ -12,22 +12,20 @@ export default function Home() {
   const [uploadText, setUploadText] = useState("");
   const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
-  const [viewingProfile, setViewingProfile] = useState(false);
-  const [selectedAddress, setSelectedAddress] = useState(null);
+  const [viewProfile, setViewProfile] = useState(null);
 
+  // Connect wallet and init Irys
   const connectWallet = async () => {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const irys = await WebUploader(WebEthereum).withAdapter(
-        EthersV6Adapter(provider)
-      );
-      const userAddress = await signer.getAddress();
+      const userAddress = (await signer.getAddress()).toLowerCase();
+      const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
 
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
-      setSelectedAddress(null);
+      setViewProfile(null);
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -39,12 +37,11 @@ export default function Home() {
     setIrysUploader(null);
     setUploadResult("");
     setFeed([]);
-    setViewingProfile(false);
-    setSelectedAddress(null);
+    setViewProfile(null);
   };
 
   const encryptConfession = (plaintext) => {
-    return btoa(plaintext); // demo only
+    return btoa(plaintext); // 🔐 Replace with stronger encryption for production
   };
 
   const decryptConfession = (encrypted) => {
@@ -57,7 +54,6 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
-
     const encrypted = encryptConfession(uploadText);
 
     try {
@@ -67,7 +63,7 @@ export default function Home() {
       await supabase.from("confessions").insert({
         tx_id,
         encrypted,
-        address,
+        address: address.toLowerCase(),
       });
 
       setUploadResult("✅ Uploaded anonymously");
@@ -78,13 +74,14 @@ export default function Home() {
     }
   };
 
-  const fetchFeed = async () => {
+  const fetchFeed = async (filterAddress = null) => {
     const query = supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(30);
 
-    if (selectedAddress) query.eq("address", selectedAddress);
+    if (filterAddress) query.eq("address", filterAddress.toLowerCase());
 
     const { data, error } = await query;
 
@@ -105,31 +102,41 @@ export default function Home() {
     const { error } = await supabase
       .from("confessions")
       .delete()
-      .eq("tx_id", tx_id);
+      .eq("tx_id", tx_id)
+      .eq("address", address.toLowerCase());
 
     if (error) {
-      console.error("Delete failed:", error);
+      console.error("Failed to delete:", error);
     }
   };
 
+  // Realtime subscription
   useEffect(() => {
-    if (connected) {
-      fetchFeed();
+    if (!connected) return;
 
-      const channel = supabase
-        .channel("confessions-realtime")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "confessions" },
-          () => fetchFeed()
-        )
-        .subscribe();
+    fetchFeed();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [connected, selectedAddress]);
+    const sub = supabase
+      .channel("confessions-feed")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, (payload) => {
+        fetchFeed(viewProfile);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sub);
+    };
+  }, [connected, viewProfile]);
+
+  const showGlobalFeed = () => {
+    setViewProfile(null);
+    fetchFeed();
+  };
+
+  const showProfile = (userAddr) => {
+    setViewProfile(userAddr);
+    fetchFeed(userAddr);
+  };
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -140,7 +147,13 @@ export default function Home() {
       ) : (
         <div>
           <p>
-            Connected: {address.slice(0, 6)}...{address.slice(-4)}
+            Connected:{" "}
+            <span
+              onClick={() => showProfile(address)}
+              style={{ textDecoration: "underline", cursor: "pointer", color: "blue" }}
+            >
+              {address.slice(0, 6)}...{address.slice(-4)}
+            </span>
           </p>
           <button onClick={disconnectWallet}>Disconnect</button>
 
@@ -151,47 +164,25 @@ export default function Home() {
               cols="40"
               value={uploadText}
               onChange={(e) => setUploadText(e.target.value)}
-              style={{
-                display: "block",
-                width: "100%",
-                marginBottom: "1rem",
-              }}
+              style={{ display: "block", width: "100%", marginBottom: "1rem" }}
             />
             <button onClick={uploadData}>Upload</button>
-            {uploadResult && (
-              <p style={{ marginTop: "1rem" }}>{uploadResult}</p>
-            )}
-          </div>
-
-          <div style={{ marginTop: "1rem" }}>
-            <button
-              onClick={() => {
-                setViewingProfile(false);
-                setSelectedAddress(null);
-              }}
-            >
-              🌐 Global Feed
-            </button>
-            <button
-              onClick={() => {
-                setViewingProfile(true);
-                setSelectedAddress(address);
-              }}
-              style={{ marginLeft: "1rem" }}
-            >
-              👤 My Confessions
-            </button>
+            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
           </div>
 
           <section style={{ marginTop: "2rem" }}>
             <h2>
-              {viewingProfile
-                ? selectedAddress === address
-                  ? "My Confessions"
-                  : `Confessions by ${selectedAddress.slice(0, 6)}...${selectedAddress.slice(-4)}`
-                : "Latest Confessions"}
+              {viewProfile
+                ? viewProfile.toLowerCase() === address.toLowerCase()
+                  ? "📁 My Confessions"
+                  : `👀 Viewing: ${viewProfile.slice(0, 6)}...${viewProfile.slice(-4)}`
+                : "🌍 Global Confessions"}
             </h2>
-
+            {viewProfile && (
+              <p>
+                <button onClick={showGlobalFeed}>← Back to Global Feed</button>
+              </p>
+            )}
             {feed.length === 0 ? (
               <p>No confessions yet.</p>
             ) : (
@@ -202,6 +193,7 @@ export default function Home() {
                     marginBottom: "1rem",
                     padding: "1rem",
                     border: "1px solid #ccc",
+                    position: "relative",
                   }}
                 >
                   <p
@@ -209,24 +201,25 @@ export default function Home() {
                       fontSize: "0.9rem",
                       color: "#555",
                       cursor: "pointer",
+                      textDecoration: "underline",
                     }}
-                    onClick={() => {
-                      if (item.address !== address) {
-                        setViewingProfile(true);
-                        setSelectedAddress(item.address);
-                      }
-                    }}
+                    onClick={() => showProfile(item.address)}
                   >
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-                  {item.address === address && (
+                  {item.address.toLowerCase() === address.toLowerCase() && (
                     <button
                       onClick={() => deleteConfession(item.tx_id)}
                       style={{
-                        marginTop: "0.5rem",
-                        fontSize: "0.8rem",
-                        color: "red",
+                        position: "absolute",
+                        top: "1rem",
+                        right: "1rem",
+                        background: "#f55",
+                        color: "white",
+                        border: "none",
+                        padding: "0.3rem 0.6rem",
+                        cursor: "pointer",
                       }}
                     >
                       Delete
