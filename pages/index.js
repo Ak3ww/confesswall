@@ -13,17 +13,21 @@ export default function Home() {
   const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
   const [viewingProfile, setViewingProfile] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState(null);
 
   const connectWallet = async () => {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const irys = await WebUploader(WebEthereum).withAdapter(
+        EthersV6Adapter(provider)
+      );
       const userAddress = await signer.getAddress();
-      const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
 
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
+      setSelectedAddress(null);
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -36,10 +40,11 @@ export default function Home() {
     setUploadResult("");
     setFeed([]);
     setViewingProfile(false);
+    setSelectedAddress(null);
   };
 
   const encryptConfession = (plaintext) => {
-    return btoa(plaintext); // demo: base64
+    return btoa(plaintext); // demo only
   };
 
   const decryptConfession = (encrypted) => {
@@ -74,13 +79,14 @@ export default function Home() {
   };
 
   const fetchFeed = async () => {
-    const filter = viewingProfile ? { address } : {};
-
-    const { data, error } = await supabase
+    const query = supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
-      .order("created_at", { ascending: false })
-      .match(filter);
+      .order("created_at", { ascending: false });
+
+    if (selectedAddress) query.eq("address", selectedAddress);
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Failed to fetch feed:", error);
@@ -99,8 +105,7 @@ export default function Home() {
     const { error } = await supabase
       .from("confessions")
       .delete()
-      .eq("tx_id", tx_id)
-      .eq("address", address); // security check (optional, since policy handles it)
+      .eq("tx_id", tx_id);
 
     if (error) {
       console.error("Delete failed:", error);
@@ -111,8 +116,8 @@ export default function Home() {
     if (connected) {
       fetchFeed();
 
-      const sub = supabase
-        .channel("confession-updates")
+      const channel = supabase
+        .channel("confessions-realtime")
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "confessions" },
@@ -121,10 +126,10 @@ export default function Home() {
         .subscribe();
 
       return () => {
-        supabase.removeChannel(sub);
+        supabase.removeChannel(channel);
       };
     }
-  }, [connected, viewingProfile]);
+  }, [connected, selectedAddress]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -134,7 +139,9 @@ export default function Home() {
         <button onClick={connectWallet}>Connect Wallet</button>
       ) : (
         <div>
-          <p>Connected: {address.slice(0, 6)}...{address.slice(-4)}</p>
+          <p>
+            Connected: {address.slice(0, 6)}...{address.slice(-4)}
+          </p>
           <button onClick={disconnectWallet}>Disconnect</button>
 
           <div style={{ marginTop: "1rem" }}>
@@ -144,36 +151,83 @@ export default function Home() {
               cols="40"
               value={uploadText}
               onChange={(e) => setUploadText(e.target.value)}
-              style={{ display: "block", width: "100%", marginBottom: "1rem" }}
+              style={{
+                display: "block",
+                width: "100%",
+                marginBottom: "1rem",
+              }}
             />
             <button onClick={uploadData}>Upload</button>
-            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
+            {uploadResult && (
+              <p style={{ marginTop: "1rem" }}>{uploadResult}</p>
+            )}
           </div>
 
-          <div style={{ marginTop: "2rem" }}>
-            <button onClick={() => setViewingProfile(false)} disabled={!viewingProfile}>
+          <div style={{ marginTop: "1rem" }}>
+            <button
+              onClick={() => {
+                setViewingProfile(false);
+                setSelectedAddress(null);
+              }}
+            >
               🌐 Global Feed
             </button>
-            <button onClick={() => setViewingProfile(true)} disabled={viewingProfile}>
+            <button
+              onClick={() => {
+                setViewingProfile(true);
+                setSelectedAddress(address);
+              }}
+              style={{ marginLeft: "1rem" }}
+            >
               👤 My Confessions
             </button>
           </div>
 
           <section style={{ marginTop: "2rem" }}>
-            <h2>{viewingProfile ? "My Confessions" : "Latest Confessions"}</h2>
+            <h2>
+              {viewingProfile
+                ? selectedAddress === address
+                  ? "My Confessions"
+                  : `Confessions by ${selectedAddress.slice(0, 6)}...${selectedAddress.slice(-4)}`
+                : "Latest Confessions"}
+            </h2>
+
             {feed.length === 0 ? (
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
-                  <p style={{ fontSize: "0.9rem", color: "#555" }}>
+                <div
+                  key={item.tx_id}
+                  style={{
+                    marginBottom: "1rem",
+                    padding: "1rem",
+                    border: "1px solid #ccc",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "0.9rem",
+                      color: "#555",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => {
+                      if (item.address !== address) {
+                        setViewingProfile(true);
+                        setSelectedAddress(item.address);
+                      }
+                    }}
+                  >
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
                   {item.address === address && (
                     <button
                       onClick={() => deleteConfession(item.tx_id)}
-                      style={{ marginTop: "0.5rem", color: "red" }}
+                      style={{
+                        marginTop: "0.5rem",
+                        fontSize: "0.8rem",
+                        color: "red",
+                      }}
                     >
                       Delete
                     </button>
