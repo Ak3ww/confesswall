@@ -1,91 +1,70 @@
-import { useState } from 'react';
-import { ethers } from 'ethers';
-import { WebIrys } from '@irys/sdk';
+import { useEffect, useState } from 'react'
+import { ethers } from 'ethers'
+import { Uploader } from '@irys/upload'
+import { Ethereum } from '@irys/upload-ethereum'
 
 export default function Home() {
-  const [walletAddress, setWalletAddress] = useState(null);
-  const [irys, setIrys] = useState(null);
-  const [confession, setConfession] = useState('');
-  const [status, setStatus] = useState('');
+  const [signer, setSigner] = useState(null)
+  const [walletAddress, setWalletAddress] = useState(null)
+  const [irys, setIrys] = useState(null)
+  const [confession, setConfession] = useState('')
+  const [status, setStatus] = useState('')
 
-  const IRYS_RPC = 'https://testnet-rpc.irys.xyz/v1/execution-rpc';
-  const IRYS_CHAIN = {
-    chainId: '0x4F6', // 1270 in hex
-    chainName: 'Irys Testnet',
-    nativeCurrency: { name: 'IRYS', symbol: 'IRYS', decimals: 18 },
-    rpcUrls: [IRYS_RPC],
-    blockExplorerUrls: ['https://testnet-explorer.irys.xyz']
-  };
+  const IRYS_RPC = 'https://testnet-rpc.irys.xyz/v1/execution-rpc'
 
   const connectWallet = async () => {
     try {
-      if (!window.ethereum) throw new Error('No MetaMask found');
+      if (!window.ethereum) throw new Error('No wallet found')
+      await window.ethereum.request({ method: 'eth_requestAccounts' })
 
-      const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts'
-      });
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const address = await signer.getAddress()
 
-      try {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [IRYS_CHAIN]
-        });
-      } catch (e) {
-        console.warn('Could not add chain, maybe already added');
-      }
+      setSigner(signer)
+      setWalletAddress(address)
+      setStatus('Wallet connected')
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const address = await signer.getAddress();
+      // Setup Irys Uploader using Devnet RPC
+      const uploader = await Uploader(Ethereum)
+        .withWallet(signer)
+        .withRpc(IRYS_RPC)
+        .devnet()
 
-      const irysInstance = new WebIrys({
-        wallet: window.ethereum,
-        rpcUrl: IRYS_RPC,
-        chain: 'ethereum',
-      });
-
-      await irysInstance.ready();
-
-      setIrys(irysInstance);
-      setWalletAddress(address);
-      setStatus('Wallet connected ✅');
+      setIrys(uploader)
     } catch (err) {
-      console.error('Connect error:', err);
-      setStatus('❌ Failed to connect');
+      console.error('Connect error:', err)
+      setStatus('Connection failed')
     }
-  };
+  }
 
   const uploadConfession = async () => {
-    if (!irys || !walletAddress) return setStatus('⚠️ Connect wallet first');
-
+    if (!irys || !walletAddress) return setStatus('Connect wallet first')
     try {
-      const receipt = await irys.upload(confession);
-      const url = `https://gateway.irys.xyz/${receipt.id}`;
-      console.log('Uploaded to:', url);
-      setStatus(`✅ Uploaded: ${url}`);
-      setConfession('');
+      const data = JSON.stringify({ confession, from: walletAddress })
+      const tx = await irys.upload(data)
+      setStatus(`Uploaded: https://gateway.irys.xyz/${tx.id}`)
+      setConfession('')
     } catch (err) {
-      console.error('Upload error:', err);
-      setStatus('❌ Upload failed');
+      console.error('Upload error:', err)
+      setStatus('Upload failed')
     }
-  };
+  }
 
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: 40 }}>
       <h1>Irys Confession Wall</h1>
       <button onClick={connectWallet}>Connect Wallet</button>
-      <p>Wallet: {walletAddress || 'Not connected'}</p>
       <p>Status: {status}</p>
-
       <textarea
         value={confession}
         onChange={(e) => setConfession(e.target.value)}
         placeholder="Write your confession..."
-        style={{ width: '100%', height: 120, marginTop: 20 }}
+        style={{ width: '100%', height: 100, marginTop: 20 }}
       />
       <button onClick={uploadConfession} style={{ marginTop: 10 }}>
         Upload Confession
       </button>
     </div>
-  );
+  )
 }
