@@ -5,16 +5,25 @@ import { ethers } from "ethers";
 
 export default function AddressPage() {
   const router = useRouter();
-  const { address: routeAddress } = router.query;
+  const { address } = router.query;
   const [confessions, setConfessions] = useState([]);
-  const [walletAddress, setWalletAddress] = useState("");
+  const [currentUser, setCurrentUser] = useState("");
+
+  const decryptConfession = (encrypted) => {
+    try {
+      return atob(encrypted);
+    } catch {
+      return "[decryption error]";
+    }
+  };
 
   const fetchConfessions = async () => {
-    if (!routeAddress) return;
+    if (!address) return;
+
     const { data, error } = await supabase
       .from("confessions")
-      .select("tx_id, encrypted, address")
-      .eq("address", routeAddress)
+      .select("tx_id, encrypted, address, created_at")
+      .eq("address", address)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -30,18 +39,19 @@ export default function AddressPage() {
     setConfessions(formatted);
   };
 
-  const decryptConfession = (encrypted) => {
-    try {
-      return atob(encrypted);
-    } catch {
-      return "[decryption error]";
-    }
-  };
-
   const deleteConfession = async (tx_id) => {
-    const { error } = await supabase.from("confessions").delete().eq("tx_id", tx_id);
-    if (error) {
-      console.error("Delete failed:", error);
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const message = `Delete confession with hash: ${tx_id}`;
+      await signer.signMessage(message);
+
+      const { error } = await supabase.from("confessions").delete().eq("tx_id", tx_id);
+      if (error) {
+        console.error("Failed to delete confession:", error);
+      }
+    } catch (e) {
+      console.error("Delete error:", e);
     }
   };
 
@@ -49,62 +59,43 @@ export default function AddressPage() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const userAddr = await signer.getAddress();
-      setWalletAddress(userAddr);
+      const addr = await signer.getAddress();
+      setCurrentUser(addr);
     } catch (e) {
-      console.warn("Wallet not connected");
+      console.error("Wallet not connected:", e);
     }
   };
 
   useEffect(() => {
-    getWallet();
-  }, []);
-
-  useEffect(() => {
     fetchConfessions();
-    if (routeAddress) {
-      const channel = supabase
-        .channel(`confession-profile-${routeAddress}`)
-        .on("postgres_changes", {
-          event: "INSERT",
-          schema: "public",
-          table: "confessions",
-          filter: `address=eq.${routeAddress}`,
-        }, fetchConfessions)
-        .on("postgres_changes", {
-          event: "DELETE",
-          schema: "public",
-          table: "confessions",
-          filter: `address=eq.${routeAddress}`,
-        }, fetchConfessions)
-        .subscribe();
-      return () => supabase.removeChannel(channel);
-    }
-  }, [routeAddress]);
+    getWallet();
+
+    const sub = supabase
+      .channel("realtime_confessions")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, fetchConfessions)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sub);
+    };
+  }, [address]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Confessions by {routeAddress?.slice(0, 6)}...{routeAddress?.slice(-4)}</h1>
+      <h1>Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}</h1>
       <button onClick={() => router.push("/")}>← Back to Global Feed</button>
 
       <section style={{ marginTop: "2rem" }}>
         {confessions.length === 0 ? (
-          <p>No confessions yet for this user.</p>
+          <p>No confessions yet from this user.</p>
         ) : (
           confessions.map((item) => (
-            <div
-              key={item.tx_id}
-              style={{
-                marginBottom: "1rem",
-                padding: "1rem",
-                border: "1px solid #ccc",
-              }}
-            >
+            <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
               <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-              {walletAddress === item.address && (
+              {currentUser === address && (
                 <button
                   onClick={() => deleteConfession(item.tx_id)}
-                  style={{ marginTop: "0.5rem" }}
+                  style={{ marginTop: "0.5rem", color: "red" }}
                 >
                   Delete
                 </button>
