@@ -1,111 +1,134 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import { createIrys } from "@irys/web-upload";
+import { WebUploader } from "@irys/web-upload";
+import { WebEthereum } from "@irys/web-upload-ethereum";
+import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 
 export default function Home() {
-  const [provider, setProvider] = useState(null);
+  const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
-  const [irys, setIrys] = useState(null);
-  const [message, setMessage] = useState("");
-  const [hashtags, setHashtags] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [irysUploader, setIrysUploader] = useState(null);
+  const [uploadText, setUploadText] = useState("");
+  const [uploadResult, setUploadResult] = useState("");
+  const [feed, setFeed] = useState([]);
 
   const connectWallet = async () => {
     try {
-      const ethProvider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await ethProvider.getSigner();
-      const ethAddress = await signer.getAddress();
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
+      const userAddress = await signer.getAddress();
 
-      const ethSigner = {
-        getAddress: async () => ethAddress,
-        signMessage: async (msg) => signer.signMessage(msg),
-      };
+      console.log("Connected to Irys:", userAddress);
+      setAddress(userAddress);
+      setIrysUploader(irys);
+      setConnected(true);
+      fetchFeed();
+    } catch (e) {
+      console.error("Failed to connect wallet:", e);
+    }
+  };
 
-      const irysInstance = await createIrys({
-        network: "devnet",
-        ethereumSigner: ethSigner,
+  const disconnectWallet = () => {
+    setConnected(false);
+    setAddress("");
+    setIrysUploader(null);
+    setUploadResult("");
+    setFeed([]);
+  };
+
+  const uploadData = async () => {
+    if (!uploadText || !irysUploader) return;
+
+    try {
+      const receipt = await irysUploader.upload(uploadText);
+      setUploadResult(`✅ Uploaded: https://gateway.irys.xyz/${receipt.id}`);
+      fetchFeed();
+    } catch (e) {
+      console.error("Upload error:", e);
+      setUploadResult("❌ Upload failed");
+    }
+  };
+
+  const fetchFeed = async () => {
+    try {
+      const res = await fetch("https://gateway.irys.xyz/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `{
+            transactions(tags: [{ name: "App-Name", values: ["ConfessWall"] }], first: 10) {
+              edges {
+                node {
+                  id
+                  owner {
+                    address
+                  }
+                }
+              }
+            }
+          }`,
+        }),
       });
 
-      setProvider(ethProvider);
-      setAddress(ethAddress);
-      setIrys(irysInstance);
-    } catch (err) {
-      console.error("Failed to connect wallet:", err);
-      alert("Wallet connection failed");
-    }
-  };
-
-  const disconnect = () => {
-    setProvider(null);
-    setAddress("");
-    setIrys(null);
-  };
-
-  const upload = async () => {
-    if (!irys || !message) return;
-    setUploading(true);
-    try {
-      const hashtagList = hashtags
-        .split(",")
-        .map((tag) => tag.trim().toLowerCase())
-        .filter((tag) => tag.length > 0);
-
-      const tags = [
-        { name: "App-Name", value: "ConfessWall" },
-        { name: "Content-Type", value: "text/plain" },
-        ...hashtagList.map((tag) => ({
-          name: "Confession-Tag",
-          value: tag,
-        })),
-      ];
-
-      const receipt = await irys.upload(message, { tags });
-      alert(`Uploaded: ${receipt.id}`);
-      setMessage("");
-      setHashtags("");
+      const json = await res.json();
+      const items = json.data.transactions.edges;
+      const results = await Promise.all(
+        items.map(async ({ node }) => {
+          const textRes = await fetch(`https://gateway.irys.xyz/${node.id}`);
+          const text = await textRes.text();
+          return {
+            id: node.id,
+            address: node.owner.address,
+            text,
+          };
+        })
+      );
+      setFeed(results);
     } catch (e) {
-      console.error(e);
-      alert("Upload failed");
+      console.error("Failed to fetch feed:", e);
     }
-    setUploading(false);
   };
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "Arial" }}>
-      <h1>Irys Confession Wall 🕊️</h1>
+    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+      <h1>Irys Confession Wall</h1>
 
-      {!address ? (
+      {!connected ? (
         <button onClick={connectWallet}>Connect Wallet</button>
       ) : (
-        <>
-          <p>
-            Connected as: <strong>{address.slice(0, 6)}...{address.slice(-4)}</strong>
-          </p>
-          <button onClick={disconnect}>Disconnect</button>
+        <div>
+          <p>Connected: {address.slice(0, 6)}...{address.slice(-4)}</p>
+          <button onClick={disconnectWallet}>Disconnect</button>
 
-          <br /><br />
+          <div style={{ marginTop: "1rem" }}>
+            <textarea
+              placeholder="Write your confession..."
+              rows="4"
+              cols="40"
+              value={uploadText}
+              onChange={(e) => setUploadText(e.target.value)}
+              style={{ display: "block", width: "100%", marginBottom: "1rem" }}
+            />
+            <button onClick={uploadData}>Upload</button>
+            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
+          </div>
 
-          <textarea
-            rows="4"
-            cols="60"
-            placeholder="Write your confession..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-          />
-          <br />
-          <input
-            type="text"
-            placeholder="Add hashtags (comma separated)"
-            value={hashtags}
-            onChange={(e) => setHashtags(e.target.value)}
-            style={{ marginTop: "1rem", width: "60%" }}
-          />
-          <br />
-          <button onClick={upload} disabled={!irys || uploading || !message}>
-            {uploading ? "Uploading..." : "Upload Confession"}
-          </button>
-        </>
+          <section style={{ marginTop: "2rem" }}>
+            <h2>Latest Confessions</h2>
+            {feed.map((item) => (
+              <div key={item.id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+                <p style={{ fontSize: "0.9rem", color: "#555" }}>
+                  {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                </p>
+                <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
+              </div>
+            ))}
+          </section>
+        </div>
       )}
-    </div>
+    </main>
   );
 }
