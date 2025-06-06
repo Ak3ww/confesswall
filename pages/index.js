@@ -23,7 +23,7 @@ export default function Home() {
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
-      fetchFeed();
+      await fetchFeed();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -43,7 +43,8 @@ export default function Home() {
     try {
       const receipt = await irysUploader.upload(uploadText);
       setUploadResult(`✅ Uploaded: https://gateway.irys.xyz/${receipt.id}`);
-      fetchFeed();
+      setUploadText("");
+      await fetchFeed();
     } catch (e) {
       console.error("Upload error:", e);
       setUploadResult("❌ Upload failed");
@@ -59,7 +60,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           query: `{
-            transactions(tags: [{ name: "App-Name", values: ["ConfessWall"] }], first: 10) {
+            transactions(tags: [{ name: "App-Name", values: ["ConfessWall"] }], first: 10, sort: HEIGHT_DESC) {
               edges {
                 node {
                   id
@@ -74,23 +75,33 @@ export default function Home() {
       });
 
       const json = await res.json();
-      const items = json.data.transactions.edges;
+      const items = json.data?.transactions?.edges || [];
       const results = await Promise.all(
         items.map(async ({ node }) => {
-          const textRes = await fetch(`https://gateway.irys.xyz/${node.id}`);
-          const text = await textRes.text();
-          return {
-            id: node.id,
-            address: node.owner.address,
-            text,
-          };
+          try {
+            const textRes = await fetch(`https://gateway.irys.xyz/${node.id}`);
+            const text = await textRes.text();
+            return {
+              id: node.id,
+              address: node.owner.address,
+              text,
+            };
+          } catch (e) {
+            return null;
+          }
         })
       );
-      setFeed(results);
+      setFeed(results.filter(Boolean));
     } catch (e) {
       console.error("Failed to fetch feed:", e);
     }
   };
+
+  useEffect(() => {
+    if (connected) {
+      fetchFeed();
+    }
+  }, [connected]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -118,14 +129,18 @@ export default function Home() {
 
           <section style={{ marginTop: "2rem" }}>
             <h2>Latest Confessions</h2>
-            {feed.map((item) => (
-              <div key={item.id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
-                <p style={{ fontSize: "0.9rem", color: "#555" }}>
-                  {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                </p>
-                <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-              </div>
-            ))}
+            {feed.length === 0 ? (
+              <p>No confessions yet.</p>
+            ) : (
+              feed.map((item) => (
+                <div key={item.id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+                  <p style={{ fontSize: "0.9rem", color: "#555" }}>
+                    {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                  </p>
+                  <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
+                </div>
+              ))
+            )}
           </section>
         </div>
       )}
