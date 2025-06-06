@@ -1,68 +1,67 @@
-import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import { supabase } from "../../lib/supabaseClient";
 
-export default function ProfilePage() {
+export default function AddressProfile() {
   const router = useRouter();
   const { address } = router.query;
-  const [feed, setFeed] = useState([]);
+  const [confessions, setConfessions] = useState([]);
+  const [ownAddress, setOwnAddress] = useState("");
 
-  const decryptConfession = (encrypted) => {
-    try {
-      return atob(encrypted);
-    } catch {
-      return "[decryption error]";
-    }
-  };
+  useEffect(() => {
+    const init = async () => {
+      const cached = localStorage.getItem("walletAddress");
+      if (cached) setOwnAddress(cached);
+    };
+    init();
+  }, []);
 
   useEffect(() => {
     if (!address) return;
-
-    const fetchProfileFeed = async () => {
+    const fetchUserConfessions = async () => {
       const { data, error } = await supabase
         .from("confessions")
         .select("tx_id, encrypted, address")
         .eq("address", address)
         .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Fetch error:", error);
-        return;
+      if (!error) {
+        const formatted = data.map((item) => ({
+          ...item,
+          text: atob(item.encrypted),
+        }));
+        setConfessions(formatted);
       }
-
-      const formatted = data.map((item) => ({
-        ...item,
-        text: decryptConfession(item.encrypted),
-      }));
-
-      setFeed(formatted);
     };
+    fetchUserConfessions();
 
-    fetchProfileFeed();
+    const channel = supabase
+      .channel("confession-user")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "confessions", filter: `address=eq.${address}` },
+        () => fetchUserConfessions()
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, [address]);
+
+  const deleteConfession = async (tx_id) => {
+    const { error } = await supabase.from("confessions").delete().eq("tx_id", tx_id);
+    if (error) console.error("Delete failed", error);
+  };
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}</h1>
-      <a href="/">← Back to Global Feed</a>
-
-      <section style={{ marginTop: "2rem" }}>
-        {feed.length === 0 ? (
-          <p>No confessions yet.</p>
-        ) : (
-          feed.map((item) => (
-            <div
-              key={item.tx_id}
-              style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}
-            >
-              <p style={{ fontSize: "0.9rem", color: "#555" }}>
-                {item.address.slice(0, 6)}...{item.address.slice(-4)}
-              </p>
-              <p>{item.text}</p>
-            </div>
-          ))
-        )}
-      </section>
+      <h2>Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}</h2>
+      <button onClick={() => router.push("/")}>← Back to Global Feed</button>
+      {confessions.map((item) => (
+        <div key={item.tx_id} style={{ border: "1px solid #ccc", padding: "1rem", marginTop: "1rem" }}>
+          <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
+          {ownAddress === item.address && (
+            <button onClick={() => deleteConfession(item.tx_id)}>Delete</button>
+          )}
+        </div>
+      ))}
     </main>
   );
 }
