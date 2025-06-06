@@ -38,7 +38,10 @@ export default function Home() {
     setFeed([]);
   };
 
-  const encryptConfession = (plaintext) => btoa(plaintext);
+  const encryptConfession = (plaintext) => {
+    return btoa(plaintext);
+  };
+
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
@@ -49,14 +52,19 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
+
     const encrypted = encryptConfession(uploadText);
+
     try {
       const receipt = await irysUploader.upload(encrypted);
+      const tx_id = receipt.id;
+
       await supabase.from("confessions").insert({
-        tx_id: receipt.id,
+        tx_id,
         encrypted,
         address,
       });
+
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
     } catch (e) {
@@ -65,10 +73,27 @@ export default function Home() {
     }
   };
 
+  const deleteConfession = async (tx_id, text) => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      const message = `Delete confession with hash: ${tx_id}`;
+      await signer.signMessage(message);
+
+      const { error } = await supabase.from("confessions").delete().eq("tx_id", tx_id);
+      if (error) {
+        console.error("Deletion failed:", error);
+      }
+    } catch (e) {
+      console.error("Delete error:", e);
+    }
+  };
+
   const fetchFeed = async () => {
     const { data, error } = await supabase
       .from("confessions")
-      .select("tx_id, encrypted, address")
+      .select("tx_id, encrypted, address, created_at")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -84,28 +109,18 @@ export default function Home() {
     setFeed(formatted);
   };
 
-  const deleteConfession = async (tx_id) => {
-    const { error } = await supabase
-      .from("confessions")
-      .delete()
-      .eq("tx_id", tx_id);
-
-    if (error) {
-      console.error("Delete failed:", error);
-    }
-  };
-
   useEffect(() => {
-    if (connected) {
-      fetchFeed();
-      const channel = supabase
-        .channel("confession-feed")
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "confessions" }, fetchFeed)
-        .on("postgres_changes", { event: "DELETE", schema: "public", table: "confessions" }, fetchFeed)
-        .subscribe();
-      return () => supabase.removeChannel(channel);
-    }
-  }, [connected]);
+    fetchFeed();
+
+    const sub = supabase
+      .channel("realtime_confessions")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, fetchFeed)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sub);
+    };
+  }, []);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -116,13 +131,13 @@ export default function Home() {
       ) : (
         <div>
           <p>
-            Connected: {address.slice(0, 6)}...{address.slice(-4)}
-            <button
+            Connected:{" "}
+            <span
               onClick={() => router.push(`/address/${address}`)}
-              style={{ marginLeft: "1rem" }}
+              style={{ cursor: "pointer", textDecoration: "underline" }}
             >
-              My Confessions
-            </button>
+              {address.slice(0, 6)}...{address.slice(-4)}
+            </span>
           </p>
           <button onClick={disconnectWallet}>Disconnect</button>
 
@@ -145,19 +160,21 @@ export default function Home() {
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div
-                  key={item.tx_id}
-                  style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}
-                >
-                  <p
-                    style={{ fontSize: "0.9rem", color: "#555", cursor: "pointer" }}
-                    onClick={() => router.push(`/address/${item.address}`)}
-                  >
-                    {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+                  <p style={{ fontSize: "0.9rem", color: "#555" }}>
+                    <span
+                      style={{ cursor: "pointer", textDecoration: "underline" }}
+                      onClick={() => router.push(`/address/${item.address}`)}
+                    >
+                      {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                    </span>
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
                   {item.address === address && (
-                    <button onClick={() => deleteConfession(item.tx_id)} style={{ marginTop: "0.5rem" }}>
+                    <button
+                      onClick={() => deleteConfession(item.tx_id, item.text)}
+                      style={{ marginTop: "0.5rem", color: "red" }}
+                    >
                       Delete
                     </button>
                   )}
