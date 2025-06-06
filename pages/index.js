@@ -92,36 +92,39 @@ export default function Home() {
   };
 
   useEffect(() => {
-    let subscription;
+  let subscription;
 
-    const setupRealtime = async () => {
-      await fetchFeed(); // initial fetch
+  const setupRealtime = async () => {
+    await fetchFeed(); // initial fetch
 
-      subscription = supabase
-        .channel("confession-feed")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "confessions",
-          },
-          async (payload) => {
-            console.log("🔔 New confession:", payload.new.tx_id);
-            await fetchFeed(); // live update
-          }
-        )
-        .subscribe();
-    };
+    subscription = supabase
+      .channel("confession-feed")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "confessions",
+        },
+        (payload) => {
+          const { tx_id, encrypted, address } = payload.new;
+          const text = decryptConfession(encrypted);
+          const newItem = { tx_id, encrypted, address, text };
 
-    if (connected) {
-      setupRealtime();
-    }
+          setFeed((prev) => [newItem, ...prev]); // push live instantly
+        }
+      )
+      .subscribe();
+  };
 
-    return () => {
-      if (subscription) supabase.removeChannel(subscription);
-    };
-  }, [connected]);
+  if (connected) {
+    setupRealtime();
+  }
+
+  return () => {
+    if (subscription) supabase.removeChannel(subscription);
+  };
+}, [connected]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
