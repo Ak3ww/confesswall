@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { useRouter } from "next/router";
 import { ethers } from "ethers";
 import { WebUploader } from "@irys/web-upload";
 import { WebEthereum } from "@irys/web-upload-ethereum";
 import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 import { supabase } from "../lib/supabaseClient";
+import { useRouter } from "next/router";
 
 export default function Home() {
   const [connected, setConnected] = useState(false);
@@ -73,17 +73,28 @@ export default function Home() {
     }
   };
 
-  const deleteConfession = async (tx_id, text) => {
+  const deleteConfession = async (tx_id) => {
+    if (!window.ethereum || !address) return;
+
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const message = `Delete Confession with tx_id: ${tx_id}`;
+      const signature = await signer.signMessage(message);
 
-      const message = `Delete confession with hash: ${tx_id}`;
-      await signer.signMessage(message);
+      const res = await fetch("/api/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tx_id, address, signature }),
+      });
 
-      const { error } = await supabase.from("confessions").delete().eq("tx_id", tx_id);
-      if (error) {
-        console.error("Deletion failed:", error);
+      const json = await res.json();
+      if (json.success) {
+        console.log("Confession deleted.");
+      } else {
+        console.error("Delete failed:", json.error);
       }
     } catch (e) {
       console.error("Delete error:", e);
@@ -93,8 +104,9 @@ export default function Home() {
   const fetchFeed = async () => {
     const { data, error } = await supabase
       .from("confessions")
-      .select("tx_id, encrypted, address, created_at")
-      .order("created_at", { ascending: false });
+      .select("tx_id, encrypted, address")
+      .order("created_at", { ascending: false })
+      .limit(10);
 
     if (error) {
       console.error("Failed to fetch feed:", error);
@@ -110,17 +122,25 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchFeed();
+    if (connected) {
+      fetchFeed();
 
-    const sub = supabase
-      .channel("realtime_confessions")
-      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, fetchFeed)
-      .subscribe();
+      const sub = supabase
+        .channel("confession_changes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "confessions" },
+          (payload) => {
+            fetchFeed();
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(sub);
-    };
-  }, []);
+      return () => {
+        supabase.removeChannel(sub);
+      };
+    }
+  }, [connected]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -132,12 +152,12 @@ export default function Home() {
         <div>
           <p>
             Connected:{" "}
-            <span
-              onClick={() => router.push(`/address/${address}`)}
-              style={{ cursor: "pointer", textDecoration: "underline" }}
+            <a
+              href={`/address/${address}`}
+              style={{ textDecoration: "underline", cursor: "pointer" }}
             >
               {address.slice(0, 6)}...{address.slice(-4)}
-            </span>
+            </a>
           </p>
           <button onClick={disconnectWallet}>Disconnect</button>
 
@@ -151,8 +171,17 @@ export default function Home() {
               style={{ display: "block", width: "100%", marginBottom: "1rem" }}
             />
             <button onClick={uploadData}>Upload</button>
-            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
+            {uploadResult && (
+              <p style={{ marginTop: "1rem" }}>{uploadResult}</p>
+            )}
           </div>
+
+          <button
+            onClick={() => router.push(`/address/${address}`)}
+            style={{ marginTop: "1rem" }}
+          >
+            My Confessions
+          </button>
 
           <section style={{ marginTop: "2rem" }}>
             <h2>Latest Confessions</h2>
@@ -160,22 +189,29 @@ export default function Home() {
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+                <div
+                  key={item.tx_id}
+                  style={{
+                    marginBottom: "1rem",
+                    padding: "1rem",
+                    border: "1px solid #ccc",
+                  }}
+                >
                   <p style={{ fontSize: "0.9rem", color: "#555" }}>
-                    <span
-                      style={{ cursor: "pointer", textDecoration: "underline" }}
-                      onClick={() => router.push(`/address/${item.address}`)}
+                    <a
+                      href={`/address/${item.address}`}
+                      style={{ textDecoration: "underline", cursor: "pointer" }}
                     >
                       {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                    </span>
+                    </a>
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
                   {item.address === address && (
                     <button
-                      onClick={() => deleteConfession(item.tx_id, item.text)}
-                      style={{ marginTop: "0.5rem", color: "red" }}
+                      onClick={() => deleteConfession(item.tx_id)}
+                      style={{ marginTop: "0.5rem" }}
                     >
-                      Delete
+                      🗑 Delete
                     </button>
                   )}
                 </div>
