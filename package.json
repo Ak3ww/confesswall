@@ -13,7 +13,7 @@
     "ethers": "^6.10.0",
     "@irys/web-upload": "0.0.15",
     "@irys/web-upload-ethereum": "0.0.15",
-    "@irys/web-upload-ethereum-ethers-v6": "0.0.15"
+    "@irys/web-upload-ethereum-ethers-v6": "0.0.15",
     "@supabase/supabase-js": "^2.39.4"
   }
 }
