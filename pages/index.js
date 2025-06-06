@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { WebUploader } from "@irys/web-upload";
 import { WebEthereum } from "@irys/web-upload-ethereum";
 import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
+import { supabase } from "../lib/supabaseClient";
 
 export default function Home() {
   const [connected, setConnected] = useState(false);
@@ -19,7 +20,6 @@ export default function Home() {
       const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
       const userAddress = await signer.getAddress();
 
-      console.log("Connected to Irys:", userAddress);
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
@@ -37,12 +37,35 @@ export default function Home() {
     setFeed([]);
   };
 
+  const encryptConfession = (plaintext) => {
+    // Simple reversible hash via btoa (for demo only — replace with AES for real use)
+    return btoa(plaintext);
+  };
+
+  const decryptConfession = (encrypted) => {
+    try {
+      return atob(encrypted);
+    } catch {
+      return "[decryption error]";
+    }
+  };
+
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
 
+    const encrypted = encryptConfession(uploadText);
+
     try {
-      const receipt = await irysUploader.upload(uploadText);
-      setUploadResult(`✅ Uploaded: https://gateway.irys.xyz/${receipt.id}`);
+      const receipt = await irysUploader.upload(encrypted);
+      const tx_id = receipt.id;
+
+      await supabase.from("confessions").insert({
+        tx_id,
+        encrypted,
+        address,
+      });
+
+      setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
       await fetchFeed();
     } catch (e) {
@@ -52,49 +75,23 @@ export default function Home() {
   };
 
   const fetchFeed = async () => {
-    try {
-      const res = await fetch("https://gateway.irys.xyz/graphql", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: `{
-            transactions(tags: [{ name: "App-Name", values: ["ConfessWall"] }], first: 10, sort: HEIGHT_DESC) {
-              edges {
-                node {
-                  id
-                  owner {
-                    address
-                  }
-                }
-              }
-            }
-          }`,
-        }),
-      });
+    const { data, error } = await supabase
+      .from("confessions")
+      .select("tx_id, encrypted, address")
+      .order("created_at", { ascending: false })
+      .limit(10);
 
-      const json = await res.json();
-      const items = json.data?.transactions?.edges || [];
-      const results = await Promise.all(
-        items.map(async ({ node }) => {
-          try {
-            const textRes = await fetch(`https://gateway.irys.xyz/${node.id}`);
-            const text = await textRes.text();
-            return {
-              id: node.id,
-              address: node.owner.address,
-              text,
-            };
-          } catch (e) {
-            return null;
-          }
-        })
-      );
-      setFeed(results.filter(Boolean));
-    } catch (e) {
-      console.error("Failed to fetch feed:", e);
+    if (error) {
+      console.error("Failed to fetch feed:", error);
+      return;
     }
+
+    const formatted = data.map((item) => ({
+      ...item,
+      text: decryptConfession(item.encrypted),
+    }));
+
+    setFeed(formatted);
   };
 
   useEffect(() => {
@@ -133,7 +130,7 @@ export default function Home() {
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div key={item.id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
                   <p style={{ fontSize: "0.9rem", color: "#555" }}>
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
