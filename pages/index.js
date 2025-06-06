@@ -14,24 +14,43 @@ export default function Home() {
   const [selectedTag, setSelectedTag] = useState("");
   const [selectedUser, setSelectedUser] = useState("");
 
+  // Attempt wallet reconnect on page load
+  useEffect(() => {
+    if (window.ethereum) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(async (accounts) => {
+        if (accounts.length > 0) {
+          await connectWallet();
+        }
+      });
+    }
+  }, []);
+
   // Connect wallet
   const connectWallet = async () => {
-    const ethProvider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await ethProvider.getSigner();
-    const ethAddress = await signer.getAddress();
-    const ethSigner = new EthereumSigner({
-      getAddress: async () => ethAddress,
-      signMessage: async (msg) => await signer.signMessage(msg),
-    });
+    if (!window.ethereum) return alert("MetaMask not found");
 
-    const irysInstance = await createIrys({
-      network: "devnet",
-      ethereumSigner: ethSigner,
-    });
+    try {
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const ethProvider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await ethProvider.getSigner();
+      const ethAddress = await signer.getAddress();
+      const ethSigner = new EthereumSigner({
+        getAddress: async () => ethAddress,
+        signMessage: async (msg) => await signer.signMessage(msg),
+      });
 
-    setProvider(ethProvider);
-    setAddress(ethAddress);
-    setIrys(irysInstance);
+      const irysInstance = await createIrys({
+        network: "devnet",
+        ethereumSigner: ethSigner,
+      });
+
+      setProvider(ethProvider);
+      setAddress(ethAddress);
+      setIrys(irysInstance);
+    } catch (err) {
+      console.error("Failed to connect wallet:", err);
+      alert("Wallet connection failed");
+    }
   };
 
   const disconnect = () => {
@@ -133,7 +152,6 @@ export default function Home() {
     setConfessions(full);
   };
 
-  // Get ?user from URL for profile view
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const user = params.get("user");
