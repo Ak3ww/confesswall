@@ -1,70 +1,43 @@
-import { useEffect, useState } from 'react'
-import { ethers } from 'ethers'
-import { Uploader } from '@irys/upload'
-import { Ethereum } from '@irys/upload-ethereum'
+import { useState } from "react";
+import { WebUploader } from "@irys/web-upload";
+import { WebEthereum } from "@irys/web-upload-ethereum";
+import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
+import { ethers } from "ethers";
 
 export default function Home() {
-  const [signer, setSigner] = useState(null)
-  const [walletAddress, setWalletAddress] = useState(null)
-  const [irys, setIrys] = useState(null)
-  const [confession, setConfession] = useState('')
-  const [status, setStatus] = useState('')
+  const [irysUploader, setIrysUploader] = useState(null);
+  const [uploadURL, setUploadURL] = useState("");
 
-  const IRYS_RPC = 'https://testnet-rpc.irys.xyz/v1/execution-rpc'
-
-  const connectWallet = async () => {
+  const connectIrys = async () => {
     try {
-      if (!window.ethereum) throw new Error('No wallet found')
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
-
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const signer = await provider.getSigner()
-      const address = await signer.getAddress()
-
-      setSigner(signer)
-      setWalletAddress(address)
-      setStatus('Wallet connected')
-
-      // Setup Irys Uploader using Devnet RPC
-      const uploader = await Uploader(Ethereum)
-        .withWallet(signer)
-        .withRpc(IRYS_RPC)
-        .devnet()
-
-      setIrys(uploader)
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const adapter = EthersV6Adapter(provider);
+      const uploader = await WebUploader(WebEthereum).withAdapter(adapter);
+      console.log("Connected:", uploader.address);
+      setIrysUploader(uploader);
     } catch (err) {
-      console.error('Connect error:', err)
-      setStatus('Connection failed')
+      console.error("Connection error:", err);
     }
-  }
+  };
 
   const uploadConfession = async () => {
-    if (!irys || !walletAddress) return setStatus('Connect wallet first')
+    if (!irysUploader) return alert("Please connect first");
     try {
-      const data = JSON.stringify({ confession, from: walletAddress })
-      const tx = await irys.upload(data)
-      setStatus(`Uploaded: https://gateway.irys.xyz/${tx.id}`)
-      setConfession('')
+      const res = await irysUploader.upload("Hello Irys world!");
+      const url = `https://gateway.irys.xyz/${res.id}`;
+      console.log("Uploaded:", url);
+      setUploadURL(url);
     } catch (err) {
-      console.error('Upload error:', err)
-      setStatus('Upload failed')
+      console.error("Upload error:", err);
     }
-  }
+  };
 
   return (
-    <div style={{ padding: 40 }}>
+    <main style={{ padding: 20 }}>
       <h1>Irys Confession Wall</h1>
-      <button onClick={connectWallet}>Connect Wallet</button>
-      <p>Status: {status}</p>
-      <textarea
-        value={confession}
-        onChange={(e) => setConfession(e.target.value)}
-        placeholder="Write your confession..."
-        style={{ width: '100%', height: 100, marginTop: 20 }}
-      />
-      <button onClick={uploadConfession} style={{ marginTop: 10 }}>
-        Upload Confession
-      </button>
-    </div>
-  )
+      <button onClick={connectIrys}>Connect Irys</button>
+      <button onClick={uploadConfession}>Upload Confession</button>
+      {uploadURL && <p><a href={uploadURL} target="_blank">View confession</a></p>}
+    </main>
+  );
 }
