@@ -23,7 +23,6 @@ export default function Home() {
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
-      await fetchFeed();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -38,8 +37,7 @@ export default function Home() {
   };
 
   const encryptConfession = (plaintext) => {
-    // Simple reversible hash via btoa (for demo only — replace with AES for real use)
-    return btoa(plaintext);
+    return btoa(plaintext); // Simple base64 demo (swap with real encryption for production)
   };
 
   const decryptConfession = (encrypted) => {
@@ -67,7 +65,6 @@ export default function Home() {
 
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
-      await fetchFeed();
     } catch (e) {
       console.error("Upload error:", e);
       setUploadResult("❌ Upload failed");
@@ -95,9 +92,35 @@ export default function Home() {
   };
 
   useEffect(() => {
+    let subscription;
+
+    const setupRealtime = async () => {
+      await fetchFeed(); // initial fetch
+
+      subscription = supabase
+        .channel("confession-feed")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "confessions",
+          },
+          async (payload) => {
+            console.log("🔔 New confession:", payload.new.tx_id);
+            await fetchFeed(); // live update
+          }
+        )
+        .subscribe();
+    };
+
     if (connected) {
-      fetchFeed();
+      setupRealtime();
     }
+
+    return () => {
+      if (subscription) supabase.removeChannel(subscription);
+    };
   }, [connected]);
 
   return (
