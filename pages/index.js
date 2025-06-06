@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { createIrys } from "@irys/web-upload";
-import { EthereumSigner } from "@irys/web-upload-ethereum";
+import { getSigner } from "@irys/web-upload-ethereum-ethers-v6";
 
 export default function Home() {
   const [provider, setProvider] = useState(null);
@@ -32,16 +32,12 @@ export default function Home() {
     try {
       await window.ethereum.request({ method: "eth_requestAccounts" });
       const ethProvider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await ethProvider.getSigner();
+      const signer = await getSigner(ethProvider);
       const ethAddress = await signer.getAddress();
-      const ethSigner = new EthereumSigner({
-        getAddress: async () => ethAddress,
-        signMessage: async (msg) => await signer.signMessage(msg),
-      });
 
       const irysInstance = await createIrys({
         network: "devnet",
-        ethereumSigner: ethSigner,
+        ethereumSigner: signer,
       });
 
       setProvider(ethProvider);
