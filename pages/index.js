@@ -37,7 +37,7 @@ export default function Home() {
   };
 
   const encryptConfession = (plaintext) => {
-    return btoa(plaintext); // Simple base64 demo (swap with real encryption for production)
+    return btoa(plaintext); // For demo only
   };
 
   const decryptConfession = (encrypted) => {
@@ -62,6 +62,16 @@ export default function Home() {
         encrypted,
         address,
       });
+
+      const newItem = {
+        tx_id,
+        encrypted,
+        address,
+        text: decryptConfession(encrypted),
+      };
+
+      // Inject to top of feed locally (for uploader)
+      setFeed((prev) => [newItem, ...prev]);
 
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
@@ -92,49 +102,31 @@ export default function Home() {
   };
 
   useEffect(() => {
-  let subscription;
+    if (!connected) return;
 
-  const setupRealtime = async () => {
-    await fetchFeed(); // ensure the initial feed loads once
+    fetchFeed();
 
-    subscription = supabase
+    const subscription = supabase
       .channel("confessions-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "confessions",
-        },
+        { event: "INSERT", schema: "public", table: "confessions" },
         (payload) => {
           const { tx_id, encrypted, address } = payload.new;
           const text = decryptConfession(encrypted);
-          const newItem = { tx_id, encrypted, address, text };
 
           setFeed((prev) => {
-            // Avoid duplicate push if same tx already shown
             if (prev.some((item) => item.tx_id === tx_id)) return prev;
-            return [newItem, ...prev];
+            return [{ tx_id, encrypted, address, text }, ...prev];
           });
         }
       )
-      .subscribe((status) => {
-        if (status !== "SUBSCRIBED") {
-          console.warn("Supabase subscription failed:", status);
-        }
-      });
-  };
+      .subscribe();
 
-  if (connected) {
-    setupRealtime();
-  }
-
-  return () => {
-    if (subscription) {
+    return () => {
       supabase.removeChannel(subscription);
-    }
-  };
-}, [connected]);
+    };
+  }, [connected]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -144,7 +136,9 @@ export default function Home() {
         <button onClick={connectWallet}>Connect Wallet</button>
       ) : (
         <div>
-          <p>Connected: {address.slice(0, 6)}...{address.slice(-4)}</p>
+          <p>
+            Connected: {address.slice(0, 6)}...{address.slice(-4)}
+          </p>
           <button onClick={disconnectWallet}>Disconnect</button>
 
           <div style={{ marginTop: "1rem" }}>
@@ -157,7 +151,9 @@ export default function Home() {
               style={{ display: "block", width: "100%", marginBottom: "1rem" }}
             />
             <button onClick={uploadData}>Upload</button>
-            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
+            {uploadResult && (
+              <p style={{ marginTop: "1rem" }}>{uploadResult}</p>
+            )}
           </div>
 
           <section style={{ marginTop: "2rem" }}>
@@ -166,7 +162,14 @@ export default function Home() {
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+                <div
+                  key={item.tx_id}
+                  style={{
+                    marginBottom: "1rem",
+                    padding: "1rem",
+                    border: "1px solid #ccc",
+                  }}
+                >
                   <p style={{ fontSize: "0.9rem", color: "#555" }}>
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
