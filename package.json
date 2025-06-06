@@ -7,11 +7,12 @@
     "start": "next start"
   },
   "dependencies": {
-    "@irys/upload": "github:irysxyz/upload",
-    "@irys/upload-ethereum": "github:irysxyz/upload-ethereum",
+    "@irys/web-upload": "^0.2.0",
+    "@irys/web-upload-ethereum": "^0.2.0",
+    "@irys/web-upload-ethereum-ethers-v6": "^0.2.0",
     "ethers": "^6.10.0",
     "next": "13.4.13",
-    "react": "latest",
-    "react-dom": "latest"
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   }
 }
