@@ -1,30 +1,37 @@
-import { supabase } from "../../lib/supabaseClient";
-import { verifyMessage } from "ethers";
+// pages/api/delete.js
+
+import { createClient } from '@supabase/supabase-js';
+import { ethers } from 'ethers';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { tx_id, address, signature } = req.body;
 
   if (!tx_id || !address || !signature) {
-    return res.status(400).json({ error: "Missing fields" });
+    return res.status(400).json({ error: 'Missing fields' });
   }
 
   try {
     const message = `Delete Confession with tx_id: ${tx_id}`;
-    const recoveredAddress = await verifyMessage(message, signature);
+    const recoveredAddress = ethers.verifyMessage(message, signature);
 
     if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
-      return res.status(401).json({ error: "Invalid signature" });
+      return res.status(401).json({ error: 'Invalid signature' });
     }
 
     const { error } = await supabase
-      .from("confessions")
+      .from('confessions')
       .delete()
-      .eq("tx_id", tx_id)
-      .eq("address", address);
+      .eq('tx_id', tx_id)
+      .eq('address', address);
 
     if (error) {
       return res.status(500).json({ error: error.message });
@@ -32,7 +39,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true });
   } catch (err) {
-    console.error("Delete error:", err);
     return res.status(500).json({ error: err.message });
   }
 }
