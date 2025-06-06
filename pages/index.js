@@ -13,6 +13,7 @@ export default function Home() {
   const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
   const [myOnly, setMyOnly] = useState(false);
+  const [viewingUser, setViewingUser] = useState(null); // for external profile view
 
   const connectWallet = async () => {
     try {
@@ -24,7 +25,7 @@ export default function Home() {
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
-      await fetchFeed(userAddress);
+      await fetchFeed();
       subscribeToChanges();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
@@ -38,6 +39,7 @@ export default function Home() {
     setUploadResult("");
     setFeed([]);
     setMyOnly(false);
+    setViewingUser(null);
   };
 
   const encryptConfession = (plaintext) => btoa(plaintext);
@@ -51,18 +53,11 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
-
     const encrypted = encryptConfession(uploadText);
     try {
       const receipt = await irysUploader.upload(encrypted);
       const tx_id = receipt.id;
-
-      await supabase.from("confessions").insert({
-        tx_id,
-        encrypted,
-        address,
-      });
-
+      await supabase.from("confessions").insert({ tx_id, encrypted, address });
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
     } catch (e) {
@@ -71,15 +66,19 @@ export default function Home() {
     }
   };
 
-  const fetchFeed = async (userAddr = address) => {
+  const fetchFeed = async () => {
     let query = supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
       .order("created_at", { ascending: false })
       .limit(10);
 
-    if (myOnly && userAddr) {
-      query = query.eq("address", userAddr);
+    if (myOnly && address) {
+      query = query.eq("address", address);
+    }
+
+    if (viewingUser && viewingUser !== address) {
+      query = query.eq("address", viewingUser);
     }
 
     const { data, error } = await query;
@@ -98,9 +97,7 @@ export default function Home() {
 
   const deleteConfession = async (tx_id) => {
     const { error } = await supabase.from("confessions").delete().eq("tx_id", tx_id);
-    if (error) {
-      console.error("Delete failed:", error);
-    }
+    if (error) console.error("Delete failed:", error);
   };
 
   const subscribeToChanges = () => {
@@ -116,7 +113,12 @@ export default function Home() {
     if (connected) {
       fetchFeed();
     }
-  }, [connected, myOnly]);
+  }, [connected, myOnly, viewingUser]);
+
+  const goBackToFeed = () => {
+    setMyOnly(false);
+    setViewingUser(null);
+  };
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -143,19 +145,38 @@ export default function Home() {
           </div>
 
           <div style={{ marginTop: "2rem" }}>
-            <button onClick={() => setMyOnly(!myOnly)}>
-              {myOnly ? "🔁 Back to Global Feed" : "👤 View My Confessions"}
-            </button>
+            <button onClick={() => {
+              setMyOnly(false);
+              setViewingUser(null);
+            }}>🌍 Global Feed</button>
+
+            <button onClick={() => {
+              setMyOnly(true);
+              setViewingUser(null);
+            }} style={{ marginLeft: "1rem" }}>👤 My Confessions</button>
           </div>
 
           <section style={{ marginTop: "2rem" }}>
-            <h2>{myOnly ? "My Confessions" : "Latest Confessions"}</h2>
+            <h2>
+              {myOnly ? "My Confessions" :
+                viewingUser ? `Confessions by ${viewingUser.slice(0, 6)}...${viewingUser.slice(-4)}` :
+                  "Latest Confessions"}
+            </h2>
+
+            {viewingUser && !myOnly && (
+              <button onClick={goBackToFeed}>← Back</button>
+            )}
+
             {feed.length === 0 ? (
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
                 <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
-                  <p style={{ fontSize: "0.9rem", color: "#555" }}>
+                  <p
+                    style={{ fontSize: "0.9rem", color: "#555", cursor: "pointer" }}
+                    onClick={() => setViewingUser(item.address)}
+                    title="View user profile"
+                  >
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
