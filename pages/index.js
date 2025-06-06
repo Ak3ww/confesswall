@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { createIrys } from "@irys/web-upload";
 import { EthereumSigner } from "@irys/web-upload-ethereum";
-import { getSigner } from "@irys/web-upload-ethereum-ethers-v6";
 
 export default function Home() {
   const [provider, setProvider] = useState(null);
@@ -18,9 +17,12 @@ export default function Home() {
   // Connect wallet
   const connectWallet = async () => {
     const ethProvider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await getSigner(ethProvider);
+    const signer = await ethProvider.getSigner();
     const ethAddress = await signer.getAddress();
-    const ethSigner = new EthereumSigner(signer);
+    const ethSigner = new EthereumSigner({
+      getAddress: async () => ethAddress,
+      signMessage: async (msg) => await signer.signMessage(msg),
+    });
 
     const irysInstance = await createIrys({
       network: "devnet",
@@ -71,29 +73,36 @@ export default function Home() {
 
   // Fetch confessions
   const fetchConfessions = async () => {
-    const res = await fetch("https://gateway.irys.xyz/graphql", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `{
-          transactions(
-            tags: [{ name: "App-Name", values: ["ConfessWall"] }]
-            first: 100
-            sort: HEIGHT_DESC
-          ) {
-            edges {
-              node {
-                id
-                owner { address }
-                tags { name value }
+    let json;
+    try {
+      const res = await fetch("https://gateway.irys.xyz/graphql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: `{
+            transactions(
+              tags: [{ name: "App-Name", values: ["ConfessWall"] }]
+              first: 100
+              sort: HEIGHT_DESC
+            ) {
+              edges {
+                node {
+                  id
+                  owner { address }
+                  tags { name value }
+                }
               }
             }
-          }
-        }`,
-      }),
-    });
+          }`,
+        }),
+      });
+      json = await res.json();
+    } catch (err) {
+      console.error("Failed to fetch Irys feed:", err);
+      setConfessions([]);
+      return;
+    }
 
-    const json = await res.json();
     const transactions = json.data.transactions.edges;
 
     const full = await Promise.all(
