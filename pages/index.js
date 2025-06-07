@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { WebUploader } from "@irys/web-upload";
 import { WebEthereum } from "@irys/web-upload-ethereum";
@@ -13,20 +13,7 @@ export default function Home() {
   const [uploadText, setUploadText] = useState("");
   const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
-  const [deleteStatus, setDeleteStatus] = useState("");
   const router = useRouter();
-
-  // Real-time listener
-  useEffect(() => {
-    const channel = supabase
-      .channel("realtime:confessions")
-      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, fetchFeed)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
 
   const connectWallet = async () => {
     try {
@@ -35,10 +22,9 @@ export default function Home() {
       const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
       const userAddress = await signer.getAddress();
 
-      setAddress(userAddress);
+      setAddress(userAddress.toLowerCase());
       setIrysUploader(irys);
       setConnected(true);
-      fetchFeed();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -52,10 +38,7 @@ export default function Home() {
     setFeed([]);
   };
 
-  const encryptConfession = (plaintext) => {
-    return btoa(plaintext); // demo encryption
-  };
-
+  const encryptConfession = (plaintext) => btoa(plaintext);
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
@@ -66,7 +49,6 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
-
     const encrypted = encryptConfession(uploadText);
 
     try {
@@ -92,51 +74,62 @@ export default function Home() {
       .from("confessions")
       .select("tx_id, encrypted, address")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(10);
 
-    if (error) {
-      console.error("Failed to fetch feed:", error);
-      return;
+    if (!error) {
+      const formatted = data.map((item) => ({
+        ...item,
+        text: decryptConfession(item.encrypted),
+      }));
+      setFeed(formatted);
     }
-
-    const formatted = data.map((item) => ({
-      ...item,
-      text: decryptConfession(item.encrypted),
-    }));
-
-    setFeed(formatted);
   };
 
-  const handleDelete = async (tx_id) => {
+  const deleteConfession = async (tx_id) => {
     try {
       const message = `Delete Confession with tx_id: ${tx_id}`;
-      const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
       const signature = await signer.signMessage(message);
-      const userAddr = await signer.getAddress();
 
       const res = await fetch("/api/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tx_id, address: userAddr, signature }),
+        body: JSON.stringify({
+          tx_id,
+          address,
+          signature,
+        }),
       });
 
       const result = await res.json();
-
       if (result.success) {
-        setDeleteStatus("✅ Deleted!");
-        setTimeout(() => setDeleteStatus(""), 2000);
+        alert("✅ Deleted");
       } else {
-        setDeleteStatus("❌ Delete failed");
+        alert("❌ Delete failed");
       }
-    } catch (err) {
-      console.error("Delete error:", err);
-      setDeleteStatus("❌ Delete error");
+    } catch (e) {
+      console.error("Delete error", e);
+      alert("❌ Delete error");
     }
   };
 
-  const goToProfile = (addr) => {
-    router.push(`/address/${addr}`);
-  };
+  useEffect(() => {
+    fetchFeed();
+
+    const subscription = supabase
+      .channel("global-confession-feed")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "confessions" },
+        fetchFeed
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -145,10 +138,10 @@ export default function Home() {
       {!connected ? (
         <button onClick={connectWallet}>Connect Wallet</button>
       ) : (
-        <>
+        <div>
           <p>Connected: {address.slice(0, 6)}...{address.slice(-4)}</p>
           <button onClick={disconnectWallet}>Disconnect</button>
-          <button onClick={() => goToProfile(address)} style={{ marginLeft: "1rem" }}>
+          <button onClick={() => router.push(`/address/${address}`)} style={{ marginLeft: "1rem" }}>
             My Confessions
           </button>
 
@@ -162,8 +155,7 @@ export default function Home() {
               style={{ display: "block", width: "100%", marginBottom: "1rem" }}
             />
             <button onClick={uploadData}>Upload</button>
-            {uploadResult && <p>{uploadResult}</p>}
-            {deleteStatus && <p style={{ color: "green" }}>{deleteStatus}</p>}
+            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
           </div>
 
           <section style={{ marginTop: "2rem" }}>
@@ -173,21 +165,20 @@ export default function Home() {
             ) : (
               feed.map((item) => (
                 <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
-                  <p
-                    style={{ fontSize: "0.9rem", color: "#007", cursor: "pointer" }}
-                    onClick={() => goToProfile(item.address)}
-                  >
+                  <p style={{ fontSize: "0.9rem", color: "#555", cursor: "pointer" }}
+                     onClick={() => router.push(`/address/${item.address}`)}>
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-                  {item.address.toLowerCase() === address.toLowerCase() && (
-                    <button onClick={() => handleDelete(item.tx_id)}>Delete</button>
+
+                  {item.address === address && (
+                    <button onClick={() => deleteConfession(item.tx_id)}>🗑️ Delete</button>
                   )}
                 </div>
               ))
             )}
           </section>
-        </>
+        </div>
       )}
     </main>
   );
