@@ -1,122 +1,129 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { supabase } from "../../lib/supabaseClient";
 import { ethers } from "ethers";
+import { supabase } from "../../lib/supabaseClient";
 
-export default function AddressProfile() {
+export default function ProfilePage() {
   const router = useRouter();
-  const { address: routeAddress } = router.query;
-  const [walletAddress, setWalletAddress] = useState("");
-  const [feed, setFeed] = useState([]);
-  const [deleteStatus, setDeleteStatus] = useState("");
+  const { address } = router.query;
 
+  const [connectedAddress, setConnectedAddress] = useState("");
+  const [confessions, setConfessions] = useState([]);
+  const [signatureCache, setSignatureCache] = useState({});
+
+  // Connect wallet only once
   useEffect(() => {
-    const getWallet = async () => {
+    const connectWallet = async () => {
       if (window.ethereum) {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
-        const addr = await signer.getAddress();
-        setWalletAddress(addr);
+        const userAddress = await signer.getAddress();
+        setConnectedAddress(userAddress.toLowerCase());
       }
     };
-
-    getWallet();
+    connectWallet();
   }, []);
 
+  // Realtime fetch for profile feed
   useEffect(() => {
-    if (!routeAddress) return;
+    if (!address) return;
 
-    const fetchProfileFeed = async () => {
+    const fetchData = async () => {
       const { data, error } = await supabase
         .from("confessions")
-        .select("tx_id, encrypted, address")
-        .eq("address", routeAddress.toLowerCase())
+        .select("*")
+        .eq("address", address.toLowerCase())
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Failed to fetch profile feed:", error);
-        return;
-      }
-
-      const formatted = data.map((item) => ({
-        ...item,
-        text: decryptConfession(item.encrypted),
-      }));
-
-      setFeed(formatted);
+      if (!error) setConfessions(data);
     };
 
-    const channel = supabase
-      .channel("realtime:confessions")
-      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, fetchProfileFeed)
+    fetchData();
+
+    const subscription = supabase
+      .channel("profile-confession-feed")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "confessions",
+          filter: `address=eq.${address.toLowerCase()}`,
+        },
+        () => fetchData()
+      )
       .subscribe();
 
-    fetchProfileFeed();
-
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(subscription);
     };
-  }, [routeAddress]);
+  }, [address]);
 
-  const decryptConfession = (encrypted) => {
-    try {
-      return atob(encrypted);
-    } catch {
-      return "[decryption error]";
-    }
-  };
-
-  const handleDelete = async (tx_id) => {
+  const deleteConfession = async (tx_id) => {
     try {
       const message = `Delete Confession with tx_id: ${tx_id}`;
-      const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
       const signature = await signer.signMessage(message);
-      const userAddr = await signer.getAddress();
 
       const res = await fetch("/api/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tx_id, address: userAddr, signature }),
+        body: JSON.stringify({
+          tx_id,
+          address: connectedAddress,
+          signature,
+        }),
       });
 
       const result = await res.json();
-
       if (result.success) {
-        setDeleteStatus("✅ Deleted!");
-        setTimeout(() => setDeleteStatus(""), 2000);
+        alert("✅ Deleted!");
       } else {
-        setDeleteStatus("❌ Delete failed");
+        alert("❌ Delete failed");
       }
-    } catch (err) {
-      console.error("Delete error:", err);
-      setDeleteStatus("❌ Delete error");
+    } catch (e) {
+      console.error("Delete error", e);
+      alert("❌ Delete error");
     }
   };
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Confessions by {routeAddress?.slice(0, 6)}...{routeAddress?.slice(-4)}</h1>
+      <h1>Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}</h1>
+
       <button onClick={() => router.push("/")}>← Back to Global Feed</button>
 
-      {deleteStatus && <p style={{ color: "green", marginTop: "1rem" }}>{deleteStatus}</p>}
-
-      <section style={{ marginTop: "2rem" }}>
-        {feed.length === 0 ? (
-          <p>No confessions found for this address.</p>
-        ) : (
-          feed.map((item) => (
-            <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+      {confessions.length === 0 ? (
+        <p style={{ marginTop: "2rem" }}>No confessions found.</p>
+      ) : (
+        <div style={{ marginTop: "2rem" }}>
+          {confessions.map((item) => (
+            <div
+              key={item.tx_id}
+              style={{
+                border: "1px solid #ccc",
+                padding: "1rem",
+                marginBottom: "1rem",
+              }}
+            >
               <p style={{ fontSize: "0.9rem", color: "#555" }}>
                 {item.address.slice(0, 6)}...{item.address.slice(-4)}
               </p>
-              <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-              {item.address.toLowerCase() === walletAddress.toLowerCase() && (
-                <button onClick={() => handleDelete(item.tx_id)}>Delete</button>
+              <p>{atob(item.encrypted)}</p>
+
+              {item.address.toLowerCase() === connectedAddress && (
+                <button
+                  onClick={() => deleteConfession(item.tx_id)}
+                  style={{ marginTop: "0.5rem" }}
+                >
+                  🗑️ Delete
+                </button>
               )}
             </div>
-          ))
-        )}
-      </section>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
