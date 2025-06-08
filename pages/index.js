@@ -1,3 +1,4 @@
+// pages/index.js
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { WebUploader } from "@irys/web-upload";
@@ -19,16 +20,12 @@ export default function Home() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const irys = await WebUploader(WebEthereum).withAdapter(
-        EthersV6Adapter(provider)
-      );
       const userAddress = await signer.getAddress();
-
+      const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
-      localStorage.setItem("walletConnected", "true");
-      fetchFeed();
+      localStorage.setItem("connected", "1");
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -40,13 +37,10 @@ export default function Home() {
     setIrysUploader(null);
     setUploadResult("");
     setFeed([]);
-    localStorage.removeItem("walletConnected");
+    localStorage.removeItem("connected");
   };
 
-  const encryptConfession = (plaintext) => {
-    return btoa(plaintext);
-  };
-
+  const encryptConfession = (plaintext) => btoa(plaintext);
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
@@ -57,20 +51,17 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
-
     const encrypted = encryptConfession(uploadText);
 
     try {
       const receipt = await irysUploader.upload(encrypted);
       const tx_id = receipt.id;
 
-      const { error } = await supabase.from("confessions").insert({
+      await supabase.from("confessions").insert({
         tx_id,
         encrypted,
         address,
       });
-
-      if (error) throw error;
 
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
@@ -83,40 +74,36 @@ export default function Home() {
   const deleteConfession = async (tx_id) => {
     try {
       const message = `Delete Confession with tx_id: ${tx_id}`;
-      const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
       const signature = await signer.signMessage(message);
-
-      const res = await fetch("/api/delete", {
+      const response = await fetch("/api/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tx_id, address, signature }),
       });
 
-      const result = await res.json();
-
+      const result = await response.json();
       if (result.success) {
-        console.log("✅ Confession deleted");
+        alert("🗑️ Deleted!");
       } else {
-        console.error("❌ Delete failed:", result.error);
+        alert("❌ Failed to delete: " + result.error);
       }
-    } catch (err) {
-      console.error("Error deleting confession:", err);
+    } catch (e) {
+      alert("❌ Error during deletion");
+      console.error(e);
     }
   };
 
   useEffect(() => {
     const sub = supabase
-      .channel("confession_feed")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "confessions" },
-        (payload) => fetchFeed()
-      )
+      .channel("confession-wall")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, () => {
+        fetchFeed();
+      })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(sub);
-    };
+    return () => supabase.removeChannel(sub);
   }, []);
 
   const fetchFeed = async () => {
@@ -127,7 +114,7 @@ export default function Home() {
       .limit(20);
 
     if (error) {
-      console.error("Fetch feed error:", error);
+      console.error("Failed to fetch feed:", error);
       return;
     }
 
@@ -140,12 +127,9 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const autoConnect = async () => {
-      if (typeof window !== "undefined" && localStorage.getItem("walletConnected") === "true") {
-        await connectWallet();
-      }
-    };
-    autoConnect();
+    if (localStorage.getItem("connected")) {
+      connectWallet();
+    }
   }, []);
 
   return (
@@ -158,18 +142,16 @@ export default function Home() {
         <div>
           <p>
             Connected:{" "}
-            <span
+            <a
+              href="#"
               onClick={() => router.push(`/address/${address}`)}
-              style={{ cursor: "pointer", textDecoration: "underline" }}
+              style={{ color: "blue", textDecoration: "underline" }}
             >
               {address.slice(0, 6)}...{address.slice(-4)}
-            </span>
+            </a>
           </p>
           <button onClick={disconnectWallet}>Disconnect</button>
-          <button
-            style={{ marginLeft: "1rem" }}
-            onClick={() => router.push(`/address/${address}`)}
-          >
+          <button onClick={() => router.push(`/address/${address}`)} style={{ marginLeft: "1rem" }}>
             My Confessions
           </button>
 
@@ -192,25 +174,19 @@ export default function Home() {
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div
-                  key={item.tx_id}
-                  style={{
-                    marginBottom: "1rem",
-                    padding: "1rem",
-                    border: "1px solid #ccc",
-                  }}
-                >
+                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
                   <p style={{ fontSize: "0.9rem", color: "#555" }}>
-                    <span
+                    <a
+                      href="#"
                       onClick={() => router.push(`/address/${item.address}`)}
-                      style={{ cursor: "pointer", textDecoration: "underline" }}
+                      style={{ color: "blue", textDecoration: "underline" }}
                     >
                       {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                    </span>
+                    </a>
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
                   {item.address.toLowerCase() === address.toLowerCase() && (
-                    <button onClick={() => deleteConfession(item.tx_id)}>🗑 Delete</button>
+                    <button onClick={() => deleteConfession(item.tx_id)}>🗑️ Delete</button>
                   )}
                 </div>
               ))
