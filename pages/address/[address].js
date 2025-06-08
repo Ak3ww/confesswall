@@ -3,27 +3,11 @@ import { useRouter } from "next/router";
 import { supabase } from "../../lib/supabaseClient";
 import { ethers } from "ethers";
 
-export default function AddressPage() {
+export default function AddressProfile() {
   const router = useRouter();
   const { address } = router.query;
-
-  const [connectedAddress, setConnectedAddress] = useState("");
-  const [feed, setFeed] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const getAddress = async () => {
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        const userAddress = await signer.getAddress();
-        setConnectedAddress(userAddress);
-      } catch (err) {
-        console.error("Failed to get connected address:", err);
-      }
-    };
-    getAddress();
-  }, []);
+  const [confessions, setConfessions] = useState([]);
+  const [userAddress, setUserAddress] = useState("");
 
   const decryptConfession = (encrypted) => {
     try {
@@ -33,9 +17,18 @@ export default function AddressPage() {
     }
   };
 
-  const fetchProfileFeed = async () => {
-    if (!address) return;
+  const fetchUserAddress = async () => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const userAddr = await signer.getAddress();
+      setUserAddress(userAddr);
+    } catch (err) {
+      console.error("Not connected:", err);
+    }
+  };
 
+  const fetchProfile = async () => {
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
@@ -43,83 +36,113 @@ export default function AddressPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Failed to fetch profile feed:", error);
-    } else {
-      const formatted = data.map((item) => ({
-        ...item,
-        text: decryptConfession(item.encrypted),
-      }));
-      setFeed(formatted);
+      console.error("Error loading confessions:", error);
+      return;
     }
 
-    setLoading(false);
+    const formatted = data.map((item) => ({
+      ...item,
+      text: decryptConfession(item.encrypted),
+    }));
+
+    setConfessions(formatted);
   };
 
-  const deleteConfession = async (tx_id) => {
+  const handleDelete = async (tx_id) => {
     try {
       const message = `Delete Confession with tx_id: ${tx_id}`;
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
+      const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
       const signature = await signer.signMessage(message);
       const response = await fetch("/api/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tx_id, address: connectedAddress, signature }),
+        body: JSON.stringify({ tx_id, address: userAddress, signature }),
       });
 
       const result = await response.json();
       if (result.success) {
-        alert("🗑️ Deleted!");
-        fetchProfileFeed(); // refresh after delete
+        setConfessions((prev) => prev.filter((c) => c.tx_id !== tx_id));
+        alert("✅ Deleted!");
       } else {
-        alert("❌ Failed to delete: " + result.error);
+        alert("❌ Failed to delete");
+        console.error(result.error);
       }
-    } catch (e) {
-      alert("❌ Error during deletion");
-      console.error(e);
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("❌ Error deleting");
     }
   };
 
   useEffect(() => {
-    fetchProfileFeed();
+    if (address) {
+      fetchProfile();
+      fetchUserAddress();
 
-    const sub = supabase
-      .channel("profile-feed")
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "confessions",
-      }, (payload) => {
-        if (payload.new?.address === address || payload.old?.address === address) {
-          fetchProfileFeed();
-        }
-      })
-      .subscribe();
+      const channel = supabase
+        .channel(`realtime:profile:${address}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "confessions",
+            filter: `address=eq.${address}`,
+          },
+          (payload) => {
+            const newItem = {
+              ...payload.new,
+              text: decryptConfession(payload.new.encrypted),
+            };
 
-    return () => supabase.removeChannel(sub);
+            setConfessions((prev) => {
+              const exists = prev.some((c) => c.tx_id === newItem.tx_id);
+              return exists ? prev : [newItem, ...prev];
+            });
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "confessions",
+            filter: `address=eq.${address}`,
+          },
+          (payload) => {
+            setConfessions((prev) =>
+              prev.filter((c) => c.tx_id !== payload.old.tx_id)
+            );
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [address]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
       <h1>Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}</h1>
-      <button onClick={() => router.push("/")}>← Back to Global Feed</button>
+      <button onClick={() => router.push("/")}>⬅ Back to Global Feed</button>
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : feed.length === 0 ? (
-        <p>No confessions from this user.</p>
+      {confessions.length === 0 ? (
+        <p style={{ marginTop: "2rem" }}>No confessions yet.</p>
       ) : (
-        feed.map((item) => (
-          <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
-            <p style={{ fontSize: "0.9rem", color: "#555" }}>
-              {item.address.slice(0, 6)}...{item.address.slice(-4)}
-            </p>
-            <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-            {item.address.toLowerCase() === connectedAddress.toLowerCase() && (
-              <button onClick={() => deleteConfession(item.tx_id)}>🗑️ Delete</button>
-            )}
-          </div>
-        ))
+        <div style={{ marginTop: "2rem" }}>
+          {confessions.map((c) => (
+            <div key={c.tx_id} style={{ border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem" }}>
+              <p style={{ fontSize: "0.9rem", color: "#555" }}>
+                {c.address.slice(0, 6)}...{c.address.slice(-4)}
+              </p>
+              <p style={{ whiteSpace: "pre-wrap" }}>{c.text}</p>
+              {c.address === userAddress && (
+                <button onClick={() => handleDelete(c.tx_id)}>🗑️ Delete</button>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </main>
   );
