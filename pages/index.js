@@ -1,4 +1,3 @@
-// pages/index.js
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { WebUploader } from "@irys/web-upload";
@@ -20,12 +19,16 @@ export default function Home() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const irys = await WebUploader(WebEthereum).withAdapter(
+        EthersV6Adapter(provider)
+      );
       const userAddress = await signer.getAddress();
-      const irys = await WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
+
       setAddress(userAddress);
       setIrysUploader(irys);
       setConnected(true);
-      localStorage.setItem("connected", "1");
+      localStorage.setItem("connected", "true");
+      await fetchFeed();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -40,7 +43,10 @@ export default function Home() {
     localStorage.removeItem("connected");
   };
 
-  const encryptConfession = (plaintext) => btoa(plaintext);
+  const encryptConfession = (plaintext) => {
+    return btoa(plaintext);
+  };
+
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
@@ -51,6 +57,7 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
+
     const encrypted = encryptConfession(uploadText);
 
     try {
@@ -71,47 +78,12 @@ export default function Home() {
     }
   };
 
-  const deleteConfession = async (tx_id) => {
-    try {
-      const message = `Delete Confession with tx_id: ${tx_id}`;
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const signature = await signer.signMessage(message);
-      const response = await fetch("/api/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tx_id, address, signature }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        alert("🗑️ Deleted!");
-      } else {
-        alert("❌ Failed to delete: " + result.error);
-      }
-    } catch (e) {
-      alert("❌ Error during deletion");
-      console.error(e);
-    }
-  };
-
-  useEffect(() => {
-    const sub = supabase
-      .channel("confession-wall")
-      .on("postgres_changes", { event: "*", schema: "public", table: "confessions" }, () => {
-        fetchFeed();
-      })
-      .subscribe();
-
-    return () => supabase.removeChannel(sub);
-  }, []);
-
   const fetchFeed = async () => {
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(10);
 
     if (error) {
       console.error("Failed to fetch feed:", error);
@@ -126,11 +98,79 @@ export default function Home() {
     setFeed(formatted);
   };
 
+  const handleDelete = async (tx_id) => {
+    try {
+      const message = `Delete Confession with tx_id: ${tx_id}`;
+      const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+      const signature = await signer.signMessage(message);
+
+      const res = await fetch("/api/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tx_id, address, signature }),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setFeed((prev) => prev.filter((item) => item.tx_id !== tx_id));
+        alert("✅ Confession deleted");
+      } else {
+        console.error("Delete failed:", result.error);
+        alert("❌ Delete failed");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("❌ Delete error");
+    }
+  };
+
   useEffect(() => {
-    if (localStorage.getItem("connected")) {
+    const wasConnected = localStorage.getItem("connected");
+    if (wasConnected === "true") {
       connectWallet();
     }
   }, []);
+
+  useEffect(() => {
+    if (!connected) return;
+
+    fetchFeed();
+
+    const channel = supabase
+      .channel("realtime:confessions")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "confessions" },
+        (payload) => {
+          const newItem = payload.new;
+          const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
+
+          if (!alreadyExists) {
+            setFeed((prev) => [
+              {
+                ...newItem,
+                text: decryptConfession(newItem.encrypted),
+              },
+              ...prev,
+            ]);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "confessions" },
+        (payload) => {
+          const deletedId = payload.old.tx_id;
+          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [connected, feed]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
@@ -142,13 +182,12 @@ export default function Home() {
         <div>
           <p>
             Connected:{" "}
-            <a
-              href="#"
+            <span
+              style={{ color: "blue", cursor: "pointer" }}
               onClick={() => router.push(`/address/${address}`)}
-              style={{ color: "blue", textDecoration: "underline" }}
             >
               {address.slice(0, 6)}...{address.slice(-4)}
-            </a>
+            </span>
           </p>
           <button onClick={disconnectWallet}>Disconnect</button>
           <button onClick={() => router.push(`/address/${address}`)} style={{ marginLeft: "1rem" }}>
@@ -174,19 +213,21 @@ export default function Home() {
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div key={item.tx_id} style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}>
+                <div
+                  key={item.tx_id}
+                  style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}
+                >
                   <p style={{ fontSize: "0.9rem", color: "#555" }}>
-                    <a
-                      href="#"
+                    <span
                       onClick={() => router.push(`/address/${item.address}`)}
-                      style={{ color: "blue", textDecoration: "underline" }}
+                      style={{ color: "blue", cursor: "pointer" }}
                     >
                       {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                    </a>
+                    </span>
                   </p>
                   <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
-                  {item.address.toLowerCase() === address.toLowerCase() && (
-                    <button onClick={() => deleteConfession(item.tx_id)}>🗑️ Delete</button>
+                  {item.address === address && (
+                    <button onClick={() => handleDelete(item.tx_id)}>🗑️ Delete</button>
                   )}
                 </div>
               ))
