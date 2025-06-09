@@ -45,6 +45,8 @@ export default function UserPage() {
       const userAddress = await signer.getAddress();
       setCurrentUser(userAddress);
       setConnected(true);
+      localStorage.setItem("connected", "true");
+      if (address) await fetchConfessions();
     } catch (err) {
       console.error("Wallet connection failed:", err);
     }
@@ -53,6 +55,7 @@ export default function UserPage() {
   const disconnectWallet = () => {
     setCurrentUser("");
     setConnected(false);
+    localStorage.removeItem("connected");
   };
 
   const handleDelete = async (tx_id) => {
@@ -83,7 +86,6 @@ export default function UserPage() {
   };
 
   useEffect(() => {
-    if (address) fetchConfessions();
     const wasConnected = localStorage.getItem("connected");
     if (wasConnected === "true") connectWallet();
   }, [address]);
@@ -97,7 +99,7 @@ export default function UserPage() {
             ConfessWall
           </button>
 
-          {connected && (
+          {connected ? (
             <div className="flex items-center gap-4">
               <span className="text-sm text-irysText">
                 {currentUser.slice(0, 6)}...{currentUser.slice(-4)}
@@ -106,38 +108,48 @@ export default function UserPage() {
                 Disconnect
               </button>
             </div>
+          ) : (
+            <button onClick={connectWallet} className="btn-irys">
+              Connect Wallet
+            </button>
           )}
         </div>
       </header>
 
-      {/* USER CONFESSIONS */}
+      {/* MAIN */}
       <main className="max-w-2xl mx-auto px-4 font-sans">
-        <h1 className="text-xl font-bold mb-4 text-irysAccent">
-          Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}
-        </h1>
-
-        <button onClick={() => router.push("/")} className="btn-irys mb-6">
-          ← Back to Home
-        </button>
-
-        {confessions.length === 0 ? (
-          <p>No confessions yet.</p>
+        {!connected ? (
+          <p className="text-center text-gray-400">Please connect wallet to view this user’s confessions.</p>
         ) : (
-          confessions.map((item) => (
-            <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
-              <p className="text-sm text-gray-400">
-                <span className="text-irysAccent cursor-pointer">
-                  {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                </span>
-              </p>
-              <p className="whitespace-pre-wrap">{item.text}</p>
-              {item.address === currentUser && (
-                <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
-                  🗑️ Delete
-                </button>
-              )}
-            </div>
-          ))
+          <>
+            <h1 className="text-xl font-bold mb-4 text-irysAccent">
+              Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}
+            </h1>
+
+            <button onClick={() => router.push("/")} className="btn-irys mb-6">
+              ← Back to Home
+            </button>
+
+            {confessions.length === 0 ? (
+              <p>No confessions yet.</p>
+            ) : (
+              confessions.map((item) => (
+                <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
+                  <p className="text-sm text-gray-400">
+                    <span className="text-irysAccent cursor-pointer">
+                      {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                    </span>
+                  </p>
+                  <p className="whitespace-pre-wrap">{item.text}</p>
+                  {item.address === currentUser && (
+                    <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
+                      🗑️ Delete
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </>
         )}
       </main>
     </>
