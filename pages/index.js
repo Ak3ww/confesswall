@@ -11,7 +11,10 @@ export default function Home() {
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
   const [irysUploader, setIrysUploader] = useState(null);
+  const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const router = useRouter();
 
   const connectWallet = async () => {
@@ -27,7 +30,7 @@ export default function Home() {
       setIrysUploader(irys);
       setConnected(true);
       localStorage.setItem("connected", "true");
-      await fetchFeed();
+      await fetchFeed(0);
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -37,10 +40,14 @@ export default function Home() {
     setConnected(false);
     setAddress("");
     setIrysUploader(null);
+    setUploadResult("");
     setFeed([]);
+    setPage(0);
+    setHasMore(true);
     localStorage.removeItem("connected");
   };
 
+  const encryptConfession = (plaintext) => btoa(plaintext);
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
@@ -49,12 +56,36 @@ export default function Home() {
     }
   };
 
-  const fetchFeed = async () => {
+  const uploadData = async (text) => {
+    if (!text || !irysUploader) return;
+    const encrypted = encryptConfession(text);
+
+    try {
+      const receipt = await irysUploader.upload(encrypted);
+      const tx_id = receipt.id;
+
+      await supabase.from("confessions").insert({
+        tx_id,
+        encrypted,
+        address,
+      });
+
+      setUploadResult("✅ Uploaded anonymously");
+      await fetchFeed(0); // Refresh list from top
+    } catch (e) {
+      console.error("Upload error:", e);
+      setUploadResult("❌ Upload failed");
+    }
+  };
+
+  const fetchFeed = async (nextPage = 0) => {
+    const start = nextPage * 10;
+    const end = start + 9;
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
       .order("created_at", { ascending: false })
-      .limit(10);
+      .range(start, end);
 
     if (error) {
       console.error("Failed to fetch feed:", error);
@@ -66,7 +97,8 @@ export default function Home() {
       text: decryptConfession(item.encrypted),
     }));
 
-    setFeed(formatted);
+    setFeed((prev) => [...prev, ...formatted]);
+    if (formatted.length < 10) setHasMore(false);
   };
 
   const handleDelete = async (tx_id) => {
@@ -106,8 +138,6 @@ export default function Home() {
   useEffect(() => {
     if (!connected) return;
 
-    fetchFeed();
-
     const channel = supabase
       .channel("realtime:confessions")
       .on(
@@ -116,7 +146,6 @@ export default function Home() {
         (payload) => {
           const newItem = payload.new;
           const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
-
           if (!alreadyExists) {
             setFeed((prev) => [
               {
@@ -144,80 +173,62 @@ export default function Home() {
   }, [connected, feed]);
 
   return (
-    <main className="min-h-screen bg-black text-white px-6 py-8">
-      {/* Header */}
-      <div className="flex items-center justify-between max-w-5xl mx-auto mb-8">
-        <div className="flex items-center space-x-4">
-          <h1
-            className="text-2xl font-bold text-white cursor-pointer"
-            onClick={() => router.push("/")}
-          >
-            ConfessWall
-          </h1>
-          {connected && (
-            <button
-              onClick={() => router.push(`/address/${address}`)}
-              className="btn-irys px-4 py-1 text-sm"
-            >
-              My Confessions
-            </button>
-          )}
-        </div>
+    <main className="min-h-screen bg-black text-white px-4 sm:px-8 py-6">
+      <div className="max-w-2xl mx-auto">
         {!connected ? (
-          <button onClick={connectWallet} className="btn-irys px-5 py-2">
-            Connect Wallet
-          </button>
+          <p className="text-center text-gray-400 mt-10">Connect wallet to start confessing.</p>
         ) : (
-          <button onClick={disconnectWallet} className="btn-irys px-5 py-2">
-            Disconnect
-          </button>
-        )}
-      </div>
+          <>
+            <ConfessBox
+              irysUploader={irysUploader}
+              address={address}
+              onUpload={(text) => uploadData(text)}
+            />
 
-      {/* Body */}
-      {!connected ? (
-        <div className="text-center mt-32 max-w-xl mx-auto">
-          <h2 className="text-3xl font-semibold mb-4">Welcome to ConfessWall</h2>
-          <p className="text-gray-400 mb-6">
-            Connect your wallet to post and view anonymous confessions stored onchain.
-          </p>
-          <p className="text-xs text-gray-500">Powered by <a href="https://irys.xyz">Irys</a></p>
-        </div>
-      ) : (
-        <div className="max-w-2xl mx-auto space-y-12">
-          <ConfessBox irysUploader={irysUploader} address={address} onUpload={fetchFeed} />
-
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Latest Confessions</h2>
-            {feed.length === 0 ? (
-              <p className="text-gray-500 text-sm">No confessions yet.</p>
-            ) : (
-              feed.map((item) => (
-                <div
-                  key={item.tx_id}
-                  className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
-                >
-                  <p
-                    className="text-sm text-irysAccent cursor-pointer"
-                    onClick={() => router.push(`/address/${item.address}`)}
-                  >
-                    {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                  </p>
-                  <p className="whitespace-pre-wrap text-white mt-2">{item.text}</p>
-                  {item.address === address && (
-                    <button
-                      onClick={() => handleDelete(item.tx_id)}
-                      className="mt-3 text-sm text-red-400 hover:underline"
+            <section className="mt-10">
+              <h2 className="text-lg font-semibold mb-4">Latest Confessions</h2>
+              {feed.length === 0 ? (
+                <p className="text-gray-500">No confessions yet.</p>
+              ) : (
+                <>
+                  {feed.map((item) => (
+                    <div
+                      key={item.tx_id}
+                      className="mb-4 p-4 border border-gray-700 rounded-lg"
                     >
-                      🗑️ Delete
+                      <p className="text-sm text-irysAccent mb-2 cursor-pointer"
+                         onClick={() => router.push(`/address/${item.address}`)}>
+                        {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                      </p>
+                      <p className="whitespace-pre-wrap">{item.text}</p>
+                      {item.address === address && (
+                        <button
+                          onClick={() => handleDelete(item.tx_id)}
+                          className="text-sm text-red-400 mt-2"
+                        >
+                          🗑️ Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {hasMore && (
+                    <button
+                      onClick={() => {
+                        const nextPage = page + 1;
+                        fetchFeed(nextPage);
+                        setPage(nextPage);
+                      }}
+                      className="block mx-auto mt-6 px-4 py-2 text-sm text-irysAccent border border-irysAccent rounded hover:bg-irysAccent hover:text-black transition"
+                    >
+                      Show More
                     </button>
                   )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+                </>
+              )}
+            </section>
+          </>
+        )}
+      </div>
     </main>
   );
 }
