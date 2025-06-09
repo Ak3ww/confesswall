@@ -5,13 +5,12 @@ import { WebEthereum } from "@irys/web-upload-ethereum";
 import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
+import ConfessBox from "../components/ConfessBox";
 
 export default function Home() {
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
   const [irysUploader, setIrysUploader] = useState(null);
-  const [uploadText, setUploadText] = useState("");
-  const [uploadResult, setUploadResult] = useState("");
   const [feed, setFeed] = useState([]);
   const router = useRouter();
 
@@ -38,40 +37,15 @@ export default function Home() {
     setConnected(false);
     setAddress("");
     setIrysUploader(null);
-    setUploadResult("");
     setFeed([]);
     localStorage.removeItem("connected");
   };
 
-  const encryptConfession = (plaintext) => btoa(plaintext);
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
     } catch {
       return "[decryption error]";
-    }
-  };
-
-  const uploadData = async () => {
-    if (!uploadText || !irysUploader) return;
-
-    const encrypted = encryptConfession(uploadText);
-
-    try {
-      const receipt = await irysUploader.upload(encrypted);
-      const tx_id = receipt.id;
-
-      await supabase.from("confessions").insert({
-        tx_id,
-        encrypted,
-        address,
-      });
-
-      setUploadResult("✅ Uploaded anonymously");
-      setUploadText("");
-    } catch (e) {
-      console.error("Upload error:", e);
-      setUploadResult("❌ Upload failed");
     }
   };
 
@@ -170,62 +144,58 @@ export default function Home() {
   }, [connected, feed]);
 
   return (
-    <main className="min-h-screen bg-irysBlack text-irysText px-4 py-6">
+    <main className="min-h-screen bg-black text-white px-6 py-8">
       {/* Header */}
-      <header className="w-full border-b border-irysAccent py-4 mb-6">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <button onClick={() => router.push("/")} className="text-irysAccent font-bold text-lg">
+      <div className="flex items-center justify-between max-w-5xl mx-auto mb-8">
+        <div className="flex items-center space-x-4">
+          <h1
+            className="text-2xl font-bold text-white cursor-pointer"
+            onClick={() => router.push("/")}
+          >
             ConfessWall
-          </button>
-          {!connected ? (
-            <button onClick={connectWallet} className="btn-irys">
-              Connect Wallet
+          </h1>
+          {connected && (
+            <button
+              onClick={() => router.push(`/address/${address}`)}
+              className="btn-irys px-4 py-1 text-sm"
+            >
+              My Confessions
             </button>
-          ) : (
-            <div className="flex items-center gap-4">
-              <span className="text-sm">
-                {address.slice(0, 6)}...{address.slice(-4)}
-              </span>
-              <button onClick={disconnectWallet} className="btn-irys">
-                Disconnect
-              </button>
-            </div>
           )}
         </div>
-      </header>
-
-      {/* Confession Form + Feed */}
-      <div className="max-w-2xl mx-auto">
         {!connected ? (
-          <p className="text-center text-irysText/70">
-            Please connect your wallet to submit and view confessions.
-          </p>
+          <button onClick={connectWallet} className="btn-irys px-5 py-2">
+            Connect Wallet
+          </button>
         ) : (
-          <>
-            {/* Upload */}
-            <textarea
-              placeholder="Write your confession..."
-              rows="4"
-              className="w-full bg-irysGray text-white p-3 rounded-md mb-4 resize-none"
-              value={uploadText}
-              onChange={(e) => setUploadText(e.target.value)}
-            />
-            <button onClick={uploadData} className="btn-irys w-full mb-2">
-              Upload
-            </button>
-            {uploadResult && (
-              <p className="text-center text-sm text-irysAccent mb-6">{uploadResult}</p>
-            )}
+          <button onClick={disconnectWallet} className="btn-irys px-5 py-2">
+            Disconnect
+          </button>
+        )}
+      </div>
 
-            {/* Feed */}
-            <h2 className="text-lg font-semibold mb-3">Latest Confessions</h2>
+      {/* Body */}
+      {!connected ? (
+        <div className="text-center mt-32 max-w-xl mx-auto">
+          <h2 className="text-3xl font-semibold mb-4">Welcome to ConfessWall</h2>
+          <p className="text-gray-400 mb-6">
+            Connect your wallet to post and view anonymous confessions stored onchain.
+          </p>
+          <p className="text-xs text-gray-500">Powered by Irys + Supabase</p>
+        </div>
+      ) : (
+        <div className="max-w-2xl mx-auto space-y-12">
+          <ConfessBox irysUploader={irysUploader} address={address} onUpload={fetchFeed} />
+
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold mb-4">Latest Confessions</h2>
             {feed.length === 0 ? (
-              <p>No confessions yet.</p>
+              <p className="text-gray-500 text-sm">No confessions yet.</p>
             ) : (
               feed.map((item) => (
                 <div
                   key={item.tx_id}
-                  className="bg-irysGray p-4 mb-4 rounded-md border border-irysAccent"
+                  className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
                 >
                   <p
                     className="text-sm text-irysAccent cursor-pointer"
@@ -233,11 +203,11 @@ export default function Home() {
                   >
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
                   </p>
-                  <p className="whitespace-pre-wrap my-2">{item.text}</p>
+                  <p className="whitespace-pre-wrap text-white mt-2">{item.text}</p>
                   {item.address === address && (
                     <button
                       onClick={() => handleDelete(item.tx_id)}
-                      className="btn-irys-danger text-sm"
+                      className="mt-3 text-sm text-red-400 hover:underline"
                     >
                       🗑️ Delete
                     </button>
@@ -245,9 +215,9 @@ export default function Home() {
                 </div>
               ))
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
