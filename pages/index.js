@@ -43,10 +43,7 @@ export default function Home() {
     localStorage.removeItem("connected");
   };
 
-  const encryptConfession = (plaintext) => {
-    return btoa(plaintext);
-  };
-
+  const encryptConfession = (plaintext) => btoa(plaintext);
   const decryptConfession = (encrypted) => {
     try {
       return atob(encrypted);
@@ -57,18 +54,13 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
-
     const encrypted = encryptConfession(uploadText);
 
     try {
       const receipt = await irysUploader.upload(encrypted);
       const tx_id = receipt.id;
 
-      await supabase.from("confessions").insert({
-        tx_id,
-        encrypted,
-        address,
-      });
+      await supabase.from("confessions").insert({ tx_id, encrypted, address });
 
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
@@ -127,9 +119,7 @@ export default function Home() {
 
   useEffect(() => {
     const wasConnected = localStorage.getItem("connected");
-    if (wasConnected === "true") {
-      connectWallet();
-    }
+    if (wasConnected === "true") connectWallet();
   }, []);
 
   useEffect(() => {
@@ -139,32 +129,21 @@ export default function Home() {
 
     const channel = supabase
       .channel("realtime:confessions")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "confessions" },
-        (payload) => {
-          const newItem = payload.new;
-          const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "confessions" }, (payload) => {
+        const newItem = payload.new;
+        const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
 
-          if (!alreadyExists) {
-            setFeed((prev) => [
-              {
-                ...newItem,
-                text: decryptConfession(newItem.encrypted),
-              },
-              ...prev,
-            ]);
-          }
+        if (!alreadyExists) {
+          setFeed((prev) => [
+            { ...newItem, text: decryptConfession(newItem.encrypted) },
+            ...prev,
+          ]);
         }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "confessions" },
-        (payload) => {
-          const deletedId = payload.old.tx_id;
-          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
-        }
-      )
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "confessions" }, (payload) => {
+        const deletedId = payload.old.tx_id;
+        setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+      })
       .subscribe();
 
     return () => {
@@ -173,61 +152,56 @@ export default function Home() {
   }, [connected, feed]);
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Irys Confession Wall</h1>
+    <main className="p-8 font-sans">
+      <h1 className="text-xl font-bold mb-6">Irys Confession Wall</h1>
 
       {!connected ? (
-        <button onClick={connectWallet}>Connect Wallet</button>
+        <button onClick={connectWallet} className="btn-accent">Connect Wallet</button>
       ) : (
         <div>
           <p>
             Connected:{" "}
-            <span
-              style={{ color: "blue", cursor: "pointer" }}
-              onClick={() => router.push(`/address/${address}`)}
-            >
+            <span className="text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${address}`)}>
               {address.slice(0, 6)}...{address.slice(-4)}
             </span>
           </p>
-          <button onClick={disconnectWallet}>Disconnect</button>
-          <button onClick={() => router.push(`/address/${address}`)} style={{ marginLeft: "1rem" }}>
-            My Confessions
-          </button>
 
-          <div style={{ marginTop: "1rem" }}>
+          <div className="flex gap-4 mt-4">
+            <button onClick={disconnectWallet} className="btn-danger">Disconnect</button>
+            <button onClick={() => router.push(`/address/${address}`)} className="btn-accent">
+              My Confessions
+            </button>
+          </div>
+
+          <div className="mt-6">
             <textarea
               placeholder="Write your confession..."
               rows="4"
-              cols="40"
               value={uploadText}
               onChange={(e) => setUploadText(e.target.value)}
-              style={{ display: "block", width: "100%", marginBottom: "1rem" }}
+              className="w-full mb-4 p-3 rounded-md bg-irysBlack text-irysText border border-neutral-800"
             />
-            <button onClick={uploadData}>Upload</button>
-            {uploadResult && <p style={{ marginTop: "1rem" }}>{uploadResult}</p>}
+            <button onClick={uploadData} className="btn-accent">Upload</button>
+            {uploadResult && <p className="mt-4">{uploadResult}</p>}
           </div>
 
-          <section style={{ marginTop: "2rem" }}>
-            <h2>Latest Confessions</h2>
+          <section className="mt-10">
+            <h2 className="text-lg font-semibold mb-4">Latest Confessions</h2>
             {feed.length === 0 ? (
               <p>No confessions yet.</p>
             ) : (
               feed.map((item) => (
-                <div
-                  key={item.tx_id}
-                  style={{ marginBottom: "1rem", padding: "1rem", border: "1px solid #ccc" }}
-                >
-                  <p style={{ fontSize: "0.9rem", color: "#555" }}>
-                    <span
-                      onClick={() => router.push(`/address/${item.address}`)}
-                      style={{ color: "blue", cursor: "pointer" }}
-                    >
+                <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
+                  <p className="text-sm text-gray-400">
+                    <span className="text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${item.address}`)}>
                       {item.address.slice(0, 6)}...{item.address.slice(-4)}
                     </span>
                   </p>
-                  <p style={{ whiteSpace: "pre-wrap" }}>{item.text}</p>
+                  <p className="whitespace-pre-wrap">{item.text}</p>
                   {item.address === address && (
-                    <button onClick={() => handleDelete(item.tx_id)}>🗑️ Delete</button>
+                    <button onClick={() => handleDelete(item.tx_id)} className="btn-danger mt-2">
+                      🗑️ Delete
+                    </button>
                   )}
                 </div>
               ))
