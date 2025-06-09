@@ -53,35 +53,31 @@ export default function Home() {
   };
 
   const fetchFeed = async (start = 0) => {
-  const { data, error } = await supabase
-    .from("confessions")
-    .select("tx_id, encrypted, address, created_at")
-    .order("created_at", { ascending: false })
-    .range(start, start + 10); // fetch 11 items
+    const { data, error } = await supabase
+      .from("confessions")
+      .select("tx_id, encrypted, address, created_at")
+      .order("created_at", { ascending: false })
+      .range(start, start + 9);
 
-  if (error) {
-    console.error("Failed to fetch feed:", error);
-    return;
-  }
+    if (error) {
+      console.error("Failed to fetch feed:", error);
+      return;
+    }
 
-  const isMore = data.length > 10;
-  const sliced = isMore ? data.slice(0, 10) : data;
+    const formatted = data.map((item) => ({
+      ...item,
+      text: decryptConfession(item.encrypted),
+    }));
 
-  const formatted = sliced.map((item) => ({
-    ...item,
-    text: decryptConfession(item.encrypted),
-  }));
+    if (start === 0) {
+      setFeed(formatted);
+    } else {
+      setFeed((prev) => [...prev, ...formatted]);
+    }
 
-  if (start === 0) {
-    setFeed(formatted);
-  } else {
-    setFeed((prev) => [...prev, ...formatted]);
-  }
-
-  setOffset(start + 10);
-  setHasMore(isMore);
-};
-
+    setOffset(start + 10);
+    setHasMore(data.length === 10);
+  };
 
   const handleDelete = async (tx_id) => {
     try {
@@ -124,20 +120,31 @@ export default function Home() {
 
     const channel = supabase
       .channel("realtime:confessions")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "confessions" }, (payload) => {
-        const newItem = payload.new;
-        const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
-        if (!alreadyExists) {
-          setFeed((prev) => [
-            { ...newItem, text: decryptConfession(newItem.encrypted) },
-            ...prev,
-          ]);
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "confessions" },
+        (payload) => {
+          const newItem = payload.new;
+          const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
+          if (!alreadyExists) {
+            setFeed((prev) => [
+              {
+                ...newItem,
+                text: decryptConfession(newItem.encrypted),
+              },
+              ...prev,
+            ]);
+          }
         }
-      })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "confessions" }, (payload) => {
-        const deletedId = payload.old.tx_id;
-        setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
-      })
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "confessions" },
+        (payload) => {
+          const deletedId = payload.old.tx_id;
+          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+        }
+      )
       .subscribe();
 
     return () => {
@@ -146,12 +153,11 @@ export default function Home() {
   }, [connected, feed]);
 
   return (
-    <main className="min-h-screen bg-black text-white px-4 sm:px-6 py-6 sm:py-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between max-w-5xl mx-auto mb-8 space-y-4 sm:space-y-0">
-        <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+    <main className="min-h-screen bg-black text-white px-4 sm:px-6 lg:px-8 pb-10">
+      <div className="sticky top-0 z-50 bg-black border-b border-gray-800 px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
           <h1
-            className="text-2xl font-bold cursor-pointer"
+            className="text-xl sm:text-2xl font-bold cursor-pointer"
             onClick={() => router.push("/")}
           >
             ConfessWall
@@ -159,28 +165,27 @@ export default function Home() {
           {connected && (
             <button
               onClick={() => router.push(`/address/${address}`)}
-              className="btn-irys px-4 py-1 text-sm"
+              className="btn-irys px-3 py-1 text-sm"
             >
               My Confessions
             </button>
           )}
         </div>
         {!connected ? (
-          <button onClick={connectWallet} className="btn-irys px-5 py-2 text-sm sm:text-base">
+          <button onClick={connectWallet} className="btn-irys px-4 py-2 text-sm">
             Connect Wallet
           </button>
         ) : (
-          <button onClick={disconnectWallet} className="btn-irys px-5 py-2 text-sm sm:text-base">
+          <button onClick={disconnectWallet} className="btn-irys px-4 py-2 text-sm">
             Disconnect
           </button>
         )}
       </div>
 
-      {/* Body */}
       {!connected ? (
-        <div className="text-center mt-24 max-w-xl mx-auto px-4">
+        <div className="text-center mt-24 max-w-xl mx-auto">
           <h2 className="text-3xl font-semibold mb-4">Welcome to ConfessWall</h2>
-          <p className="text-gray-400 mb-6 text-sm">
+          <p className="text-gray-400 mb-6">
             Connect your wallet to post and view anonymous confessions stored onchain.
           </p>
           <p className="text-xs text-gray-500">
@@ -188,7 +193,7 @@ export default function Home() {
           </p>
         </div>
       ) : (
-        <div className="max-w-2xl mx-auto space-y-12">
+        <div className="max-w-2xl mx-auto mt-8 space-y-12 px-2 sm:px-0">
           <ConfessBox irysUploader={irysUploader} address={address} onUpload={() => fetchFeed(0)} />
 
           <div>
