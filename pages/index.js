@@ -152,63 +152,70 @@ export default function Home() {
   }, [connected, feed]);
 
   return (
-    <main className="p-8 font-sans">
-      <h1 className="text-xl font-bold mb-6">Irys Confession Wall</h1>
+    <>
+      {/* HEADER */}
+      <header className="w-full border-b border-irysAccent bg-black px-4 py-3 mb-8">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          {/* Left: Home */}
+          <button onClick={() => router.push("/")} className="text-irysAccent font-bold text-lg">
+            ConfessWall
+          </button>
 
-      {!connected ? (
-        <button onClick={connectWallet} className="btn-irys">Connect Wallet</button>
-      ) : (
-        <div>
-          <p>
-            Connected:{" "}
-            <span className="text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${address}`)}>
-              {address.slice(0, 6)}...{address.slice(-4)}
-            </span>
-          </p>
-
-          <div className="flex gap-4 mt-4">
-            <button onClick={disconnectWallet} className="btn-irys">Disconnect</button>
-            <button onClick={() => router.push(`/address/${address}`)} className="btn-irys">
-              My Confessions
+          {/* Right: Wallet Connect / Disconnect */}
+          {!connected ? (
+            <button onClick={connectWallet} className="btn-irys">
+              Connect Wallet
             </button>
-          </div>
-
-          <div className="mt-6">
-            <textarea
-              placeholder="Write your confession..."
-              rows="4"
-              value={uploadText}
-              onChange={(e) => setUploadText(e.target.value)}
-              className="w-full mb-4 p-3 rounded-md bg-irysBlack text-irysText border border-neutral-800"
-            />
-            <button onClick={uploadData} className="btn-irys">Upload</button>
-            {uploadResult && <p className="mt-4">{uploadResult}</p>}
-          </div>
-
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold mb-4">Latest Confessions</h2>
-            {feed.length === 0 ? (
-              <p>No confessions yet.</p>
-            ) : (
-              feed.map((item) => (
-                <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
-                  <p className="text-sm text-gray-400">
-                    <span className="text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${item.address}`)}>
-                      {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                    </span>
-                  </p>
-                  <p className="whitespace-pre-wrap">{item.text}</p>
-                  {item.address === address && (
-                    <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
-                      🗑️ Delete
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </section>
+          ) : (
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-irysText">
+                {address.slice(0, 6)}...{address.slice(-4)}
+              </span>
+              <button onClick={disconnectWallet} className="btn-irys">
+                Disconnect
+              </button>
+            </div>
+          )}
         </div>
-      )}
-    </main>
+      </header>
+
+      {/* MAIN CONTENT */}
+      <main className="max-w-2xl mx-auto px-4 font-sans">
+        <div className="mb-10">
+          <textarea
+            placeholder="Write your confession..."
+            rows="4"
+            value={uploadText}
+            onChange={(e) => setUploadText(e.target.value)}
+            className="w-full mb-4 p-3 rounded-md bg-irysBlack text-irysText border border-neutral-800"
+          />
+          <button onClick={uploadData} className="btn-irys">Upload</button>
+          {uploadResult && <p className="mt-4">{uploadResult}</p>}
+        </div>
+
+        <section>
+          <h2 className="text-lg font-semibold mb-4">Latest Confessions</h2>
+          {feed.length === 0 ? (
+            <p>No confessions yet.</p>
+          ) : (
+            feed.map((item) => (
+              <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
+                <p className="text-sm text-gray-400">
+                  <span className="text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${item.address}`)}>
+                    {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                  </span>
+                </p>
+                <p className="whitespace-pre-wrap">{item.text}</p>
+                {item.address === address && (
+                  <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
+                    🗑️ Delete
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </section>
+      </main>
+    </>
   );
 }
