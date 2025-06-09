@@ -95,9 +95,17 @@ export default function AddressPage() {
   return (
     <main className="min-h-screen bg-black text-white px-4 sm:px-8 py-6">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold mb-4">
-          Confessions from {address?.slice(0, 6)}...{address?.slice(-4)}
-        </h1>
+       <div className="mb-6">
+  <button
+    onClick={() => router.push("/")}
+    className="btn-irys text-sm mb-3"
+  >
+    ← Back to Global Feed
+  </button>
+  <h1 className="text-2xl font-bold">
+    Confessions from {address?.slice(0, 6)}...{address?.slice(-4)}
+  </h1>
+</div>
 
         {/* Confess Box if connected user is viewing their own page */}
         {address === connectedAddress && (
