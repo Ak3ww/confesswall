@@ -7,15 +7,35 @@ import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
 import ConfessBox from "../components/ConfessBox";
 
+const formatTimeAgo = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now - date) / 1000);
+
+  const intervals = [
+    { label: "y", seconds: 31536000 },
+    { label: "mo", seconds: 2592000 },
+    { label: "w", seconds: 604800 },
+    { label: "d", seconds: 86400 },
+    { label: "h", seconds: 3600 },
+    { label: "m", seconds: 60 },
+    { label: "s", seconds: 1 },
+  ];
+
+  for (const interval of intervals) {
+    const count = Math.floor(seconds / interval.seconds);
+    if (count >= 1) return `${count}${interval.label}`;
+  }
+
+  return "just now";
+};
+
 export default function Home() {
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
   const [irysUploader, setIrysUploader] = useState(null);
   const [feed, setFeed] = useState([]);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const router = useRouter();
-  const PAGE_SIZE = 10;
 
   const connectWallet = async () => {
     try {
@@ -30,7 +50,7 @@ export default function Home() {
       setIrysUploader(irys);
       setConnected(true);
       localStorage.setItem("connected", "true");
-      await fetchFeed(0); // reset
+      await fetchFeed();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -41,7 +61,6 @@ export default function Home() {
     setAddress("");
     setIrysUploader(null);
     setFeed([]);
-    setOffset(0);
     localStorage.removeItem("connected");
   };
 
@@ -53,12 +72,12 @@ export default function Home() {
     }
   };
 
-  const fetchFeed = async (start = 0) => {
+  const fetchFeed = async () => {
     const { data, error } = await supabase
       .from("confessions")
-      .select("tx_id, encrypted, address")
+      .select("tx_id, encrypted, address, created_at")
       .order("created_at", { ascending: false })
-      .range(start, start + PAGE_SIZE - 1);
+      .limit(10);
 
     if (error) {
       console.error("Failed to fetch feed:", error);
@@ -68,16 +87,10 @@ export default function Home() {
     const formatted = data.map((item) => ({
       ...item,
       text: decryptConfession(item.encrypted),
+      time: formatTimeAgo(item.created_at),
     }));
 
-    if (start === 0) {
-      setFeed(formatted);
-    } else {
-      setFeed((prev) => [...prev, ...formatted]);
-    }
-
-    setHasMore(data.length === PAGE_SIZE);
-    setOffset(start + PAGE_SIZE);
+    setFeed(formatted);
   };
 
   const handleDelete = async (tx_id) => {
@@ -115,124 +128,84 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-  if (!connected) return;
+    if (!connected) return;
 
-  const channel = supabase
-    .channel("realtime:confessions")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "confessions" },
-      (payload) => {
+    fetchFeed();
+
+    const channel = supabase
+      .channel("realtime:confessions")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "confessions" }, (payload) => {
         const newItem = payload.new;
-        setFeed((prev) => {
-          const alreadyExists = prev.some((item) => item.tx_id === newItem.tx_id);
-          if (alreadyExists) return prev;
+        const exists = feed.some((i) => i.tx_id === newItem.tx_id);
+        if (!exists) {
+          setFeed((prev) => [
+            {
+              ...newItem,
+              text: decryptConfession(newItem.encrypted),
+              time: formatTimeAgo(newItem.created_at),
+            },
+            ...prev,
+          ]);
+        }
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "confessions" }, (payload) => {
+        setFeed((prev) => prev.filter((item) => item.tx_id !== payload.old.tx_id));
+      })
+      .subscribe();
 
-          return [{ ...newItem, text: decryptConfession(newItem.encrypted) }, ...prev];
-        });
-      }
-    )
-    .on(
-      "postgres_changes",
-      { event: "DELETE", schema: "public", table: "confessions" },
-      (payload) => {
-        const deletedId = payload.old.tx_id;
-        setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [connected]); // ✅ remove `feed` dependency
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [connected, feed]);
 
   return (
     <main className="min-h-screen bg-black text-white px-6 py-8">
-      {/* Header */}
       <div className="flex items-center justify-between max-w-5xl mx-auto mb-8">
         <div className="flex items-center space-x-4">
-          <h1
-            className="text-2xl font-bold text-white cursor-pointer"
-            onClick={() => router.push("/")}
-          >
+          <h1 className="text-2xl font-bold text-white cursor-pointer" onClick={() => router.push("/")}>
             ConfessWall
           </h1>
           {connected && (
-            <button
-              onClick={() => router.push(`/address/${address}`)}
-              className="btn-irys px-4 py-1 text-sm"
-            >
+            <button onClick={() => router.push(`/address/${address}`)} className="btn-irys px-4 py-1 text-sm">
               My Confessions
             </button>
           )}
         </div>
         {!connected ? (
-          <button onClick={connectWallet} className="btn-irys px-5 py-2">
-            Connect Wallet
-          </button>
+          <button onClick={connectWallet} className="btn-irys px-5 py-2">Connect Wallet</button>
         ) : (
-          <button onClick={disconnectWallet} className="btn-irys px-5 py-2">
-            Disconnect
-          </button>
+          <button onClick={disconnectWallet} className="btn-irys px-5 py-2">Disconnect</button>
         )}
       </div>
 
-      {/* Body */}
       {!connected ? (
         <div className="text-center mt-32 max-w-xl mx-auto">
           <h2 className="text-3xl font-semibold mb-4">Welcome to ConfessWall</h2>
-          <p className="text-gray-400 mb-6">
-            Connect your wallet to post and view anonymous confessions stored onchain.
-          </p>
-          <p className="text-xs text-gray-500">
-            Powered by <a href="https://irys.xyz">Irys</a>
-          </p>
+          <p className="text-gray-400 mb-6">Connect your wallet to post and view anonymous confessions stored onchain.</p>
+          <p className="text-xs text-gray-500">Powered by <a href="https://irys.xyz">Irys</a></p>
         </div>
       ) : (
         <div className="max-w-2xl mx-auto space-y-12">
-          <ConfessBox irysUploader={irysUploader} address={address} onUpload={() => fetchFeed(0)} />
+          <ConfessBox irysUploader={irysUploader} address={address} onUpload={fetchFeed} />
 
           <div className="mt-8">
             <h2 className="text-xl font-semibold mb-4">Latest Confessions</h2>
             {feed.length === 0 ? (
               <p className="text-gray-500 text-sm">No confessions yet.</p>
             ) : (
-              <>
-                {feed.map((item) => (
-                  <div
-                    key={item.tx_id}
-                    className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
-                  >
-                    <p
-                      className="text-sm text-irysAccent cursor-pointer"
-                      onClick={() => router.push(`/address/${item.address}`)}
-                    >
-                      {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                    </p>
-                    <p className="whitespace-pre-wrap text-white mt-2">{item.text}</p>
-                    {item.address === address && (
-                      <button
-                        onClick={() => handleDelete(item.tx_id)}
-                        className="mt-3 text-sm text-red-400 hover:underline"
-                      >
-                        🗑️ Delete
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                {hasMore && (
-                  <div className="text-center mt-6">
-                    <button
-                      onClick={() => fetchFeed(offset)}
-                      className="btn-irys px-5 py-2 text-sm"
-                    >
-                      Show More
+              feed.map((item) => (
+                <div key={item.tx_id} className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]">
+                  <p className="text-sm text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${item.address}`)}>
+                    {item.address.slice(0, 6)}...{item.address.slice(-4)} · <span className="text-gray-400">{item.time}</span>
+                  </p>
+                  <p className="whitespace-pre-wrap text-white mt-2">{item.text}</p>
+                  {item.address === address && (
+                    <button onClick={() => handleDelete(item.tx_id)} className="mt-3 text-sm text-red-400 hover:underline">
+                      🗑️ Delete
                     </button>
-                  </div>
-                )}
-              </>
+                  )}
+                </div>
+              ))
             )}
           </div>
         </div>
