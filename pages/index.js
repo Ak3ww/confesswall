@@ -156,7 +156,7 @@ export default function Home() {
       <h1 className="text-xl font-bold mb-6">Irys Confession Wall</h1>
 
       {!connected ? (
-        <button onClick={connectWallet} className="btn-accent">Connect Wallet</button>
+        <button onClick={connectWallet} className="btn-irys">Connect Wallet</button>
       ) : (
         <div>
           <p>
@@ -167,8 +167,8 @@ export default function Home() {
           </p>
 
           <div className="flex gap-4 mt-4">
-            <button onClick={disconnectWallet} className="btn-danger">Disconnect</button>
-            <button onClick={() => router.push(`/address/${address}`)} className="btn-accent">
+            <button onClick={disconnectWallet} className="btn-irys">Disconnect</button>
+            <button onClick={() => router.push(`/address/${address}`)} className="btn-irys">
               My Confessions
             </button>
           </div>
@@ -181,7 +181,7 @@ export default function Home() {
               onChange={(e) => setUploadText(e.target.value)}
               className="w-full mb-4 p-3 rounded-md bg-irysBlack text-irysText border border-neutral-800"
             />
-            <button onClick={uploadData} className="btn-accent">Upload</button>
+            <button onClick={uploadData} className="btn-irys">Upload</button>
             {uploadResult && <p className="mt-4">{uploadResult}</p>}
           </div>
 
@@ -199,7 +199,7 @@ export default function Home() {
                   </p>
                   <p className="whitespace-pre-wrap">{item.text}</p>
                   {item.address === address && (
-                    <button onClick={() => handleDelete(item.tx_id)} className="btn-danger mt-2">
+                    <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
                       🗑️ Delete
                     </button>
                   )}
