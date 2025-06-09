@@ -1,24 +1,16 @@
+// utils/time.js
 export function formatTimeAgo(dateString) {
   const date = new Date(dateString);
   const now = new Date();
-  const secondsAgo = Math.floor((now - date) / 1000);
 
-  const intervals = [
-    { label: "y", seconds: 31536000 },
-    { label: "mo", seconds: 2592000 },
-    { label: "w", seconds: 604800 },
-    { label: "d", seconds: 86400 },
-    { label: "h", seconds: 3600 },
-    { label: "m", seconds: 60 },
-    { label: "s", seconds: 1 },
-  ];
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
 
-  for (const interval of intervals) {
-    const count = Math.floor(secondsAgo / interval.seconds);
-    if (count >= 1) {
-      return `${count}${interval.label}`;
-    }
-  }
-
-  return "just now";
+  if (diffSeconds < 60) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
 }
