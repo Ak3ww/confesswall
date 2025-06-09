@@ -6,31 +6,7 @@ import { ethers } from "ethers";
 import { WebUploader } from "@irys/web-upload";
 import { WebEthereum } from "@irys/web-upload-ethereum";
 import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
-
-const formatTimeAgo = (utcString) => {
-  const date = new Date(utcString); // UTC input
-  const now = new Date(); // Local time, but that’s okay — browser handles UTC parsing
-
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  const intervals = [
-    { label: "y", seconds: 31536000 },
-    { label: "mo", seconds: 2592000 },
-    { label: "w", seconds: 604800 },
-    { label: "d", seconds: 86400 },
-    { label: "h", seconds: 3600 },
-    { label: "m", seconds: 60 },
-    { label: "s", seconds: 1 },
-  ];
-
-  for (const interval of intervals) {
-    const count = Math.floor(seconds / interval.seconds);
-    if (count >= 1) return `${count}${interval.label}`;
-  }
-
-  return "just now";
-};
-
+import { formatTimeAgo } from "../../utils/time";
 
 export default function AddressPage() {
   const router = useRouter();
@@ -39,6 +15,8 @@ export default function AddressPage() {
   const [feed, setFeed] = useState([]);
   const [connectedAddress, setConnectedAddress] = useState("");
   const [irysUploader, setIrysUploader] = useState(null);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
   const decryptConfession = (encrypted) => {
     try {
@@ -48,14 +26,15 @@ export default function AddressPage() {
     }
   };
 
-  const fetchFeed = async () => {
+  const fetchFeed = async (start = 0) => {
     if (!address) return;
 
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address, created_at")
       .eq("address", address)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(start, start + 9);
 
     if (error) {
       console.error("Failed to fetch confessions:", error);
@@ -65,10 +44,16 @@ export default function AddressPage() {
     const formatted = data.map((item) => ({
       ...item,
       text: decryptConfession(item.encrypted),
-      time: formatTimeAgo(item.created_at),
     }));
 
-    setFeed(formatted);
+    if (start === 0) {
+      setFeed(formatted);
+    } else {
+      setFeed((prev) => [...prev, ...formatted]);
+    }
+
+    setOffset(start + 10);
+    setHasMore(data.length === 10);
   };
 
   const handleDelete = async (tx_id) => {
@@ -115,7 +100,7 @@ export default function AddressPage() {
 
   useEffect(() => {
     initConnected();
-    fetchFeed();
+    fetchFeed(0);
   }, [address]);
 
   return (
@@ -138,7 +123,7 @@ export default function AddressPage() {
             <ConfessBox
               irysUploader={irysUploader}
               address={connectedAddress}
-              onUpload={fetchFeed}
+              onUpload={() => fetchFeed(0)}
             />
           </div>
         )}
@@ -148,26 +133,35 @@ export default function AddressPage() {
           {feed.length === 0 ? (
             <p className="text-gray-500">No confessions found.</p>
           ) : (
-            feed.map((item) => (
-              <div
-                key={item.tx_id}
-                className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
-              >
-                <p className="text-sm text-irysAccent mb-2">
-                  {item.address.slice(0, 6)}...{item.address.slice(-4)} ·{" "}
-                  <span className="text-gray-400">{item.time}</span>
-                </p>
-                <p className="whitespace-pre-wrap">{item.text}</p>
-                {item.address === connectedAddress && (
-                  <button
-                    onClick={() => handleDelete(item.tx_id)}
-                    className="text-sm text-red-400 mt-2 hover:underline"
-                  >
-                    🗑️ Delete
+            <>
+              {feed.map((item) => (
+                <div
+                  key={item.tx_id}
+                  className="mb-4 p-4 border border-gray-700 rounded-lg"
+                >
+                  <div className="flex justify-between text-sm text-irysAccent mb-2">
+                    <span>{item.address.slice(0, 6)}...{item.address.slice(-4)}</span>
+                    <span className="text-gray-500">{formatTimeAgo(item.created_at)}</span>
+                  </div>
+                  <p className="whitespace-pre-wrap">{item.text}</p>
+                  {item.address === connectedAddress && (
+                    <button
+                      onClick={() => handleDelete(item.tx_id)}
+                      className="text-sm text-red-400 mt-2 hover:underline"
+                    >
+                      🗑️ Delete
+                    </button>
+                  )}
+                </div>
+              ))}
+              {hasMore && (
+                <div className="flex justify-center mt-6">
+                  <button onClick={() => fetchFeed(offset)} className="btn-irys px-6 py-2">
+                    Show More
                   </button>
-                )}
-              </div>
-            ))
+                </div>
+              )}
+            </>
           )}
         </section>
       </div>
