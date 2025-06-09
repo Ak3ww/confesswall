@@ -14,9 +14,8 @@ export default function AddressPage() {
   const [feed, setFeed] = useState([]);
   const [connectedAddress, setConnectedAddress] = useState("");
   const [irysUploader, setIrysUploader] = useState(null);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
+  const perPage = 10;
 
   const decryptConfession = (encrypted) => {
     try {
@@ -26,15 +25,18 @@ export default function AddressPage() {
     }
   };
 
-  const fetchFeed = async (start = 0) => {
+  const fetchFeed = async (page = 1) => {
     if (!address) return;
+
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
 
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
       .eq("address", address)
       .order("created_at", { ascending: false })
-      .range(start, start + PAGE_SIZE - 1);
+      .range(from, to);
 
     if (error) {
       console.error("Failed to fetch confessions:", error);
@@ -46,14 +48,7 @@ export default function AddressPage() {
       text: decryptConfession(item.encrypted),
     }));
 
-    if (start === 0) {
-      setFeed(formatted);
-    } else {
-      setFeed((prev) => [...prev, ...formatted]);
-    }
-
-    setHasMore(data.length === PAGE_SIZE);
-    setOffset(start + PAGE_SIZE);
+    setFeed((prev) => [...prev, ...formatted]);
   };
 
   const handleDelete = async (tx_id) => {
@@ -98,10 +93,66 @@ export default function AddressPage() {
     }
   };
 
+  // ⚠️ Subscribing to real-time insert/delete once
+  useEffect(() => {
+    if (!address) return;
+
+    const channel = supabase
+      .channel("realtime:confessions")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "confessions",
+          filter: `address=eq.${address}`,
+        },
+        (payload) => {
+          const newItem = payload.new;
+          setFeed((prev) => {
+            const alreadyExists = prev.some((item) => item.tx_id === newItem.tx_id);
+            if (alreadyExists) return prev;
+
+            return [
+              {
+                ...newItem,
+                text: decryptConfession(newItem.encrypted),
+              },
+              ...prev,
+            ];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "confessions",
+          filter: `address=eq.${address}`,
+        },
+        (payload) => {
+          const deletedId = payload.old.tx_id;
+          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [address]);
+
   useEffect(() => {
     initConnected();
-    fetchFeed(0);
+    fetchFeed();
   }, [address]);
+
+  const handleShowMore = () => {
+    const nextPage = page + 1;
+    fetchFeed(nextPage);
+    setPage(nextPage);
+  };
 
   return (
     <main className="min-h-screen bg-black text-white px-4 sm:px-8 py-6">
@@ -118,13 +169,16 @@ export default function AddressPage() {
           </h1>
         </div>
 
-        {/* Confess Box if connected user is viewing their own page */}
         {address === connectedAddress && (
           <div className="mb-10">
             <ConfessBox
               irysUploader={irysUploader}
               address={connectedAddress}
-              onUpload={() => fetchFeed(0)}
+              onUpload={() => {
+                setFeed([]);
+                setPage(1);
+                fetchFeed(1);
+              }}
             />
           </div>
         )}
@@ -154,12 +208,9 @@ export default function AddressPage() {
                   )}
                 </div>
               ))}
-              {hasMore && (
-                <div className="text-center mt-6">
-                  <button
-                    onClick={() => fetchFeed(offset)}
-                    className="btn-irys px-5 py-2 text-sm"
-                  >
+              {feed.length % perPage === 0 && (
+                <div className="text-center mt-4">
+                  <button onClick={handleShowMore} className="btn-irys px-4 py-1">
                     Show More
                   </button>
                 </div>
