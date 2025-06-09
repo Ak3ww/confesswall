@@ -7,10 +7,11 @@ import { WebUploader } from "@irys/web-upload";
 import { WebEthereum } from "@irys/web-upload-ethereum";
 import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 
-const formatTimeAgo = (dateString) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const seconds = Math.floor((now - date) / 1000);
+const formatTimeAgo = (utcString) => {
+  const date = new Date(utcString); // UTC input
+  const now = new Date(); // Local time, but that’s okay — browser handles UTC parsing
+
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   const intervals = [
     { label: "y", seconds: 31536000 },
@@ -29,6 +30,7 @@ const formatTimeAgo = (dateString) => {
 
   return "just now";
 };
+
 
 export default function AddressPage() {
   const router = useRouter();
