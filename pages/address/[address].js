@@ -127,7 +127,8 @@ export default function AddressProfile() {
       <h1 className="text-xl font-bold mb-6">
         Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}
       </h1>
-      <button onClick={() => router.push("/")} className="btn-accent mb-8">
+
+      <button onClick={() => router.push("/")} className="btn-irys mb-8">
         ⬅ Back to Global Feed
       </button>
 
@@ -147,7 +148,7 @@ export default function AddressProfile() {
               {c.address === userAddress && (
                 <button
                   onClick={() => handleDelete(c.tx_id)}
-                  className="btn-danger mt-2"
+                  className="btn-irys mt-2"
                 >
                   🗑️ Delete
                 </button>
