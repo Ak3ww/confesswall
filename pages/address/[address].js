@@ -3,11 +3,12 @@ import { useRouter } from "next/router";
 import { supabase } from "../../lib/supabaseClient";
 import { ethers } from "ethers";
 
-export default function AddressProfile() {
+export default function UserPage() {
   const router = useRouter();
   const { address } = router.query;
   const [confessions, setConfessions] = useState([]);
-  const [userAddress, setUserAddress] = useState("");
+  const [currentUser, setCurrentUser] = useState("");
+  const [connected, setConnected] = useState(false);
 
   const decryptConfession = (encrypted) => {
     try {
@@ -17,18 +18,7 @@ export default function AddressProfile() {
     }
   };
 
-  const fetchUserAddress = async () => {
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const userAddr = await signer.getAddress();
-      setUserAddress(userAddr);
-    } catch (err) {
-      console.error("Not connected:", err);
-    }
-  };
-
-  const fetchProfile = async () => {
+  const fetchConfessions = async () => {
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
@@ -36,7 +26,7 @@ export default function AddressProfile() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error loading confessions:", error);
+      console.error("Error fetching confessions:", error);
       return;
     }
 
@@ -48,115 +38,108 @@ export default function AddressProfile() {
     setConfessions(formatted);
   };
 
+  const connectWallet = async () => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
+      setCurrentUser(userAddress);
+      setConnected(true);
+    } catch (err) {
+      console.error("Wallet connection failed:", err);
+    }
+  };
+
+  const disconnectWallet = () => {
+    setCurrentUser("");
+    setConnected(false);
+  };
+
   const handleDelete = async (tx_id) => {
     try {
       const message = `Delete Confession with tx_id: ${tx_id}`;
       const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
       const signature = await signer.signMessage(message);
-      const response = await fetch("/api/delete", {
+
+      const res = await fetch("/api/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tx_id, address: userAddress, signature }),
+        body: JSON.stringify({ tx_id, address, signature }),
       });
 
-      const result = await response.json();
+      const result = await res.json();
+
       if (result.success) {
-        setConfessions((prev) => prev.filter((c) => c.tx_id !== tx_id));
-        alert("✅ Deleted!");
+        setConfessions((prev) => prev.filter((item) => item.tx_id !== tx_id));
+        alert("✅ Confession deleted");
       } else {
-        alert("❌ Failed to delete");
-        console.error(result.error);
+        console.error("Delete failed:", result.error);
+        alert("❌ Delete failed");
       }
     } catch (err) {
       console.error("Delete error:", err);
-      alert("❌ Error deleting");
+      alert("❌ Delete error");
     }
   };
 
   useEffect(() => {
-    if (address) {
-      fetchProfile();
-      fetchUserAddress();
-
-      const channel = supabase
-        .channel(`realtime:profile:${address}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "confessions",
-            filter: `address=eq.${address}`,
-          },
-          (payload) => {
-            const newItem = {
-              ...payload.new,
-              text: decryptConfession(payload.new.encrypted),
-            };
-
-            setConfessions((prev) => {
-              const exists = prev.some((c) => c.tx_id === newItem.tx_id);
-              return exists ? prev : [newItem, ...prev];
-            });
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "DELETE",
-            schema: "public",
-            table: "confessions",
-            filter: `address=eq.${address}`,
-          },
-          (payload) => {
-            setConfessions((prev) =>
-              prev.filter((c) => c.tx_id !== payload.old.tx_id)
-            );
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    if (address) fetchConfessions();
+    const wasConnected = localStorage.getItem("connected");
+    if (wasConnected === "true") connectWallet();
   }, [address]);
 
   return (
-    <main className="p-8 font-sans">
-      <h1 className="text-xl font-bold mb-6">
-        Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}
-      </h1>
+    <>
+      {/* HEADER */}
+      <header className="w-full border-b border-irysAccent bg-black px-4 py-3 mb-8">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          <button onClick={() => router.push("/")} className="text-irysAccent font-bold text-lg">
+            ConfessWall
+          </button>
 
-      <button onClick={() => router.push("/")} className="btn-irys mb-8">
-        ⬅ Back to Global Feed
-      </button>
+          {connected && (
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-irysText">
+                {currentUser.slice(0, 6)}...{currentUser.slice(-4)}
+              </span>
+              <button onClick={disconnectWallet} className="btn-irys">
+                Disconnect
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
 
-      {confessions.length === 0 ? (
-        <p className="mt-8">No confessions yet.</p>
-      ) : (
-        <div className="mt-8">
-          {confessions.map((c) => (
-            <div
-              key={c.tx_id}
-              className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray"
-            >
+      {/* USER CONFESSIONS */}
+      <main className="max-w-2xl mx-auto px-4 font-sans">
+        <h1 className="text-xl font-bold mb-4 text-irysAccent">
+          Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}
+        </h1>
+
+        <button onClick={() => router.push("/")} className="btn-irys mb-6">
+          ← Back to Home
+        </button>
+
+        {confessions.length === 0 ? (
+          <p>No confessions yet.</p>
+        ) : (
+          confessions.map((item) => (
+            <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
               <p className="text-sm text-gray-400">
-                {c.address.slice(0, 6)}...{c.address.slice(-4)}
+                <span className="text-irysAccent cursor-pointer">
+                  {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                </span>
               </p>
-              <p className="whitespace-pre-wrap">{c.text}</p>
-              {c.address === userAddress && (
-                <button
-                  onClick={() => handleDelete(c.tx_id)}
-                  className="btn-irys mt-2"
-                >
+              <p className="whitespace-pre-wrap">{item.text}</p>
+              {item.address === currentUser && (
+                <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
                   🗑️ Delete
                 </button>
               )}
             </div>
-          ))}
-        </div>
-      )}
-    </main>
+          ))
+        )}
+      </main>
+    </>
   );
 }
