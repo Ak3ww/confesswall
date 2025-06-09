@@ -120,31 +120,20 @@ export default function Home() {
 
     const channel = supabase
       .channel("realtime:confessions")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "confessions" },
-        (payload) => {
-          const newItem = payload.new;
-          const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
-          if (!alreadyExists) {
-            setFeed((prev) => [
-              {
-                ...newItem,
-                text: decryptConfession(newItem.encrypted),
-              },
-              ...prev,
-            ]);
-          }
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "confessions" }, (payload) => {
+        const newItem = payload.new;
+        const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
+        if (!alreadyExists) {
+          setFeed((prev) => [
+            { ...newItem, text: decryptConfession(newItem.encrypted) },
+            ...prev,
+          ]);
         }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "confessions" },
-        (payload) => {
-          const deletedId = payload.old.tx_id;
-          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
-        }
-      )
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "confessions" }, (payload) => {
+        const deletedId = payload.old.tx_id;
+        setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+      })
       .subscribe();
 
     return () => {
@@ -153,11 +142,12 @@ export default function Home() {
   }, [connected, feed]);
 
   return (
-    <main className="min-h-screen bg-black text-white px-6 py-8">
-      <div className="flex items-center justify-between max-w-5xl mx-auto mb-8">
-        <div className="flex items-center space-x-4">
+    <main className="min-h-screen bg-black text-white px-4 sm:px-6 py-6 sm:py-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between max-w-5xl mx-auto mb-8 space-y-4 sm:space-y-0">
+        <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
           <h1
-            className="text-2xl font-bold text-white cursor-pointer"
+            className="text-2xl font-bold cursor-pointer"
             onClick={() => router.push("/")}
           >
             ConfessWall
@@ -172,29 +162,32 @@ export default function Home() {
           )}
         </div>
         {!connected ? (
-          <button onClick={connectWallet} className="btn-irys px-5 py-2">
+          <button onClick={connectWallet} className="btn-irys px-5 py-2 text-sm sm:text-base">
             Connect Wallet
           </button>
         ) : (
-          <button onClick={disconnectWallet} className="btn-irys px-5 py-2">
+          <button onClick={disconnectWallet} className="btn-irys px-5 py-2 text-sm sm:text-base">
             Disconnect
           </button>
         )}
       </div>
 
+      {/* Body */}
       {!connected ? (
-        <div className="text-center mt-32 max-w-xl mx-auto">
+        <div className="text-center mt-24 max-w-xl mx-auto px-4">
           <h2 className="text-3xl font-semibold mb-4">Welcome to ConfessWall</h2>
-          <p className="text-gray-400 mb-6">
+          <p className="text-gray-400 mb-6 text-sm">
             Connect your wallet to post and view anonymous confessions stored onchain.
           </p>
-          <p className="text-xs text-gray-500">Powered by <a href="https://irys.xyz">Irys</a></p>
+          <p className="text-xs text-gray-500">
+            Powered by <a href="https://irys.xyz" className="underline">Irys</a>
+          </p>
         </div>
       ) : (
         <div className="max-w-2xl mx-auto space-y-12">
           <ConfessBox irysUploader={irysUploader} address={address} onUpload={() => fetchFeed(0)} />
 
-          <div className="mt-8">
+          <div>
             <h2 className="text-xl font-semibold mb-4">Latest Confessions</h2>
             {feed.length === 0 ? (
               <p className="text-gray-500 text-sm">No confessions yet.</p>
@@ -241,4 +234,4 @@ export default function Home() {
       )}
     </main>
   );
-} 
+}
