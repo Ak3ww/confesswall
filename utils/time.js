@@ -1,6 +1,6 @@
 // utils/time.js
 export function formatTimeAgo(utcDateString) {
-  const date = new Date(utcDateString); // auto-converted to local
+  const date = new Date(utcDateString + "Z"); // force parse as UTC
   const now = new Date();
 
   const diffMs = now - date;
