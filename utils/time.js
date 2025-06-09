@@ -1,9 +1,17 @@
 // utils/time.js
-export function formatTimeAgo(dateString) {
-  const date = new Date(dateString);
-  const now = new Date();
+export function formatTimeAgo(utcDateString) {
+  const utcDate = new Date(utcDateString);
+  const localDate = new Date(
+    utcDate.getUTCFullYear(),
+    utcDate.getUTCMonth(),
+    utcDate.getUTCDate(),
+    utcDate.getUTCHours(),
+    utcDate.getUTCMinutes(),
+    utcDate.getUTCSeconds()
+  );
 
-  const diffMs = now.getTime() - date.getTime();
+  const now = new Date();
+  const diffMs = now - localDate;
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffMinutes / 60);
