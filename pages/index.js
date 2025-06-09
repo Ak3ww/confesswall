@@ -6,35 +6,15 @@ import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
 import ConfessBox from "../components/ConfessBox";
+import { formatTimeAgo } from "../utils/time";
 
-const formatTimeAgo = (utcString) => {
-  const date = new Date(utcString); // UTC input
-  const now = new Date(); // Local time, but that’s okay — browser handles UTC parsing
-
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  const intervals = [
-    { label: "y", seconds: 31536000 },
-    { label: "mo", seconds: 2592000 },
-    { label: "w", seconds: 604800 },
-    { label: "d", seconds: 86400 },
-    { label: "h", seconds: 3600 },
-    { label: "m", seconds: 60 },
-    { label: "s", seconds: 1 },
-  ];
-
-  for (const interval of intervals) {
-    const count = Math.floor(seconds / interval.seconds);
-    if (count >= 1) return `${count}${interval.label}`;
-  }
-
-  return "just now";
-};
 export default function Home() {
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
   const [irysUploader, setIrysUploader] = useState(null);
   const [feed, setFeed] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const router = useRouter();
 
   const connectWallet = async () => {
@@ -50,7 +30,6 @@ export default function Home() {
       setIrysUploader(irys);
       setConnected(true);
       localStorage.setItem("connected", "true");
-      await fetchFeed();
     } catch (e) {
       console.error("Failed to connect wallet:", e);
     }
@@ -61,6 +40,7 @@ export default function Home() {
     setAddress("");
     setIrysUploader(null);
     setFeed([]);
+    setOffset(0);
     localStorage.removeItem("connected");
   };
 
@@ -72,12 +52,12 @@ export default function Home() {
     }
   };
 
-  const fetchFeed = async () => {
+  const fetchFeed = async (start = 0) => {
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address, created_at")
       .order("created_at", { ascending: false })
-      .limit(10);
+      .range(start, start + 9);
 
     if (error) {
       console.error("Failed to fetch feed:", error);
@@ -87,10 +67,16 @@ export default function Home() {
     const formatted = data.map((item) => ({
       ...item,
       text: decryptConfession(item.encrypted),
-      time: formatTimeAgo(item.created_at),
     }));
 
-    setFeed(formatted);
+    if (start === 0) {
+      setFeed(formatted);
+    } else {
+      setFeed((prev) => [...prev, ...formatted]);
+    }
+
+    setOffset(start + 10);
+    setHasMore(data.length === 10);
   };
 
   const handleDelete = async (tx_id) => {
@@ -130,27 +116,35 @@ export default function Home() {
   useEffect(() => {
     if (!connected) return;
 
-    fetchFeed();
+    fetchFeed(0);
 
     const channel = supabase
       .channel("realtime:confessions")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "confessions" }, (payload) => {
-        const newItem = payload.new;
-        const exists = feed.some((i) => i.tx_id === newItem.tx_id);
-        if (!exists) {
-          setFeed((prev) => [
-            {
-              ...newItem,
-              text: decryptConfession(newItem.encrypted),
-              time: formatTimeAgo(newItem.created_at),
-            },
-            ...prev,
-          ]);
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "confessions" },
+        (payload) => {
+          const newItem = payload.new;
+          const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
+          if (!alreadyExists) {
+            setFeed((prev) => [
+              {
+                ...newItem,
+                text: decryptConfession(newItem.encrypted),
+              },
+              ...prev,
+            ]);
+          }
         }
-      })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "confessions" }, (payload) => {
-        setFeed((prev) => prev.filter((item) => item.tx_id !== payload.old.tx_id));
-      })
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "confessions" },
+        (payload) => {
+          const deletedId = payload.old.tx_id;
+          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+        }
+      )
       .subscribe();
 
     return () => {
@@ -162,50 +156,85 @@ export default function Home() {
     <main className="min-h-screen bg-black text-white px-6 py-8">
       <div className="flex items-center justify-between max-w-5xl mx-auto mb-8">
         <div className="flex items-center space-x-4">
-          <h1 className="text-2xl font-bold text-white cursor-pointer" onClick={() => router.push("/")}>
+          <h1
+            className="text-2xl font-bold text-white cursor-pointer"
+            onClick={() => router.push("/")}
+          >
             ConfessWall
           </h1>
           {connected && (
-            <button onClick={() => router.push(`/address/${address}`)} className="btn-irys px-4 py-1 text-sm">
+            <button
+              onClick={() => router.push(`/address/${address}`)}
+              className="btn-irys px-4 py-1 text-sm"
+            >
               My Confessions
             </button>
           )}
         </div>
         {!connected ? (
-          <button onClick={connectWallet} className="btn-irys px-5 py-2">Connect Wallet</button>
+          <button onClick={connectWallet} className="btn-irys px-5 py-2">
+            Connect Wallet
+          </button>
         ) : (
-          <button onClick={disconnectWallet} className="btn-irys px-5 py-2">Disconnect</button>
+          <button onClick={disconnectWallet} className="btn-irys px-5 py-2">
+            Disconnect
+          </button>
         )}
       </div>
 
       {!connected ? (
         <div className="text-center mt-32 max-w-xl mx-auto">
           <h2 className="text-3xl font-semibold mb-4">Welcome to ConfessWall</h2>
-          <p className="text-gray-400 mb-6">Connect your wallet to post and view anonymous confessions stored onchain.</p>
+          <p className="text-gray-400 mb-6">
+            Connect your wallet to post and view anonymous confessions stored onchain.
+          </p>
           <p className="text-xs text-gray-500">Powered by <a href="https://irys.xyz">Irys</a></p>
         </div>
       ) : (
         <div className="max-w-2xl mx-auto space-y-12">
-          <ConfessBox irysUploader={irysUploader} address={address} onUpload={fetchFeed} />
+          <ConfessBox irysUploader={irysUploader} address={address} onUpload={() => fetchFeed(0)} />
 
           <div className="mt-8">
             <h2 className="text-xl font-semibold mb-4">Latest Confessions</h2>
             {feed.length === 0 ? (
               <p className="text-gray-500 text-sm">No confessions yet.</p>
             ) : (
-              feed.map((item) => (
-                <div key={item.tx_id} className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]">
-                  <p className="text-sm text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${item.address}`)}>
-                    {item.address.slice(0, 6)}...{item.address.slice(-4)} · <span className="text-gray-400">{item.time}</span>
-                  </p>
-                  <p className="whitespace-pre-wrap text-white mt-2">{item.text}</p>
-                  {item.address === address && (
-                    <button onClick={() => handleDelete(item.tx_id)} className="mt-3 text-sm text-red-400 hover:underline">
-                      🗑️ Delete
+              <>
+                {feed.map((item) => (
+                  <div
+                    key={item.tx_id}
+                    className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
+                  >
+                    <div className="flex justify-between text-sm text-irysAccent mb-2">
+                      <span
+                        className="cursor-pointer"
+                        onClick={() => router.push(`/address/${item.address}`)}
+                      >
+                        {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                      </span>
+                      <span className="text-gray-500">
+                        {formatTimeAgo(item.created_at)}
+                      </span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-white mt-1">{item.text}</p>
+                    {item.address === address && (
+                      <button
+                        onClick={() => handleDelete(item.tx_id)}
+                        className="mt-3 text-sm text-red-400 hover:underline"
+                      >
+                        🗑️ Delete
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {hasMore && (
+                  <div className="flex justify-center mt-6">
+                    <button onClick={() => fetchFeed(offset)} className="btn-irys px-6 py-2">
+                      Show More
                     </button>
-                  )}
-                </div>
-              ))
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
