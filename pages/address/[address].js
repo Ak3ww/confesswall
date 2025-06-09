@@ -104,20 +104,22 @@ export default function AddressPage() {
   }, [address]);
 
   return (
-    <main className="min-h-screen bg-black text-white px-4 sm:px-8 py-6">
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-6">
-          <button
-            onClick={() => router.push("/")}
-            className="btn-irys text-sm mb-3"
-          >
-            ← Back to Global Feed
-          </button>
-          <h1 className="text-2xl font-bold break-all">
-            Confessions from {address?.slice(0, 6)}...{address?.slice(-4)}
-          </h1>
-        </div>
+    <main className="min-h-screen bg-black text-white">
+      {/* Sticky Header */}
+      <div className="sticky top-0 bg-black z-50 px-4 sm:px-8 py-4 border-b border-gray-800 flex justify-between items-center">
+        <h1
+          className="text-lg font-semibold cursor-pointer"
+          onClick={() => router.push("/")}
+        >
+          ← Back to Global Feed
+        </h1>
+        <p className="text-sm text-gray-400 hidden sm:block">
+          Viewing {address?.slice(0, 6)}...{address?.slice(-4)}
+        </p>
+      </div>
 
+      <div className="max-w-2xl mx-auto px-4 sm:px-8 py-6">
+        {/* Confess Box if connected user is viewing their own page */}
         {address === connectedAddress && (
           <div className="mb-10">
             <ConfessBox
@@ -140,14 +142,14 @@ export default function AddressPage() {
                   className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
                 >
                   <div className="flex justify-between text-sm text-irysAccent mb-2">
-                    <span className="break-all">
+                    <span>
                       {item.address.slice(0, 6)}...{item.address.slice(-4)}
                     </span>
                     <span className="text-gray-500">
                       {formatTimeAgo(item.created_at)}
                     </span>
                   </div>
-                  <p className="whitespace-pre-wrap text-white mt-1">{item.text}</p>
+                  <p className="whitespace-pre-wrap">{item.text}</p>
                   {item.address === connectedAddress && (
                     <button
                       onClick={() => handleDelete(item.tx_id)}
@@ -160,7 +162,10 @@ export default function AddressPage() {
               ))}
               {hasMore && (
                 <div className="flex justify-center mt-6">
-                  <button onClick={() => fetchFeed(offset)} className="btn-irys px-6 py-2">
+                  <button
+                    onClick={() => fetchFeed(offset)}
+                    className="btn-irys px-6 py-2"
+                  >
                     Show More
                   </button>
                 </div>
