@@ -113,7 +113,7 @@ export default function AddressPage() {
           >
             ← Back to Global Feed
           </button>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold break-all">
             Confessions from {address?.slice(0, 6)}...{address?.slice(-4)}
           </h1>
         </div>
@@ -137,13 +137,17 @@ export default function AddressPage() {
               {feed.map((item) => (
                 <div
                   key={item.tx_id}
-                  className="mb-4 p-4 border border-gray-700 rounded-lg"
+                  className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
                 >
                   <div className="flex justify-between text-sm text-irysAccent mb-2">
-                    <span>{item.address.slice(0, 6)}...{item.address.slice(-4)}</span>
-                    <span className="text-gray-500">{formatTimeAgo(item.created_at)}</span>
+                    <span className="break-all">
+                      {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                    </span>
+                    <span className="text-gray-500">
+                      {formatTimeAgo(item.created_at)}
+                    </span>
                   </div>
-                  <p className="whitespace-pre-wrap">{item.text}</p>
+                  <p className="whitespace-pre-wrap text-white mt-1">{item.text}</p>
                   {item.address === connectedAddress && (
                     <button
                       onClick={() => handleDelete(item.tx_id)}
