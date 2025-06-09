@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "../../lib/supabaseClient";
+import ConfessBox from "../../components/ConfessBox";
 import { ethers } from "ethers";
+import { WebUploader } from "@irys/web-upload";
+import { WebEthereum } from "@irys/web-upload-ethereum";
+import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 
-export default function UserPage() {
+export default function AddressPage() {
   const router = useRouter();
   const { address } = router.query;
-  const [confessions, setConfessions] = useState([]);
-  const [currentUser, setCurrentUser] = useState("");
-  const [connected, setConnected] = useState(false);
+
+  const [feed, setFeed] = useState([]);
+  const [connectedAddress, setConnectedAddress] = useState("");
+  const [irysUploader, setIrysUploader] = useState(null);
 
   const decryptConfession = (encrypted) => {
     try {
@@ -18,7 +23,9 @@ export default function UserPage() {
     }
   };
 
-  const fetchConfessions = async () => {
+  const fetchFeed = async () => {
+    if (!address) return;
+
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
@@ -26,7 +33,7 @@ export default function UserPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching confessions:", error);
+      console.error("Failed to fetch confessions:", error);
       return;
     }
 
@@ -35,27 +42,7 @@ export default function UserPage() {
       text: decryptConfession(item.encrypted),
     }));
 
-    setConfessions(formatted);
-  };
-
-  const connectWallet = async () => {
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      setCurrentUser(userAddress);
-      setConnected(true);
-      localStorage.setItem("connected", "true");
-      if (address) await fetchConfessions();
-    } catch (err) {
-      console.error("Wallet connection failed:", err);
-    }
-  };
-
-  const disconnectWallet = () => {
-    setCurrentUser("");
-    setConnected(false);
-    localStorage.removeItem("connected");
+    setFeed(formatted);
   };
 
   const handleDelete = async (tx_id) => {
@@ -73,7 +60,7 @@ export default function UserPage() {
       const result = await res.json();
 
       if (result.success) {
-        setConfessions((prev) => prev.filter((item) => item.tx_id !== tx_id));
+        setFeed((prev) => prev.filter((item) => item.tx_id !== tx_id));
         alert("✅ Confession deleted");
       } else {
         console.error("Delete failed:", result.error);
@@ -85,73 +72,71 @@ export default function UserPage() {
     }
   };
 
+  const initConnected = async () => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const addr = await signer.getAddress();
+      const irys = await WebUploader(WebEthereum).withAdapter(
+        EthersV6Adapter(provider)
+      );
+      setConnectedAddress(addr);
+      setIrysUploader(irys);
+    } catch (err) {
+      console.error("Connect check failed:", err);
+    }
+  };
+
   useEffect(() => {
-    const wasConnected = localStorage.getItem("connected");
-    if (wasConnected === "true") connectWallet();
+    initConnected();
+    fetchFeed();
   }, [address]);
 
   return (
-    <>
-      {/* HEADER */}
-      <header className="w-full border-b border-irysAccent bg-black px-4 py-3 mb-8">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <button onClick={() => router.push("/")} className="text-irysAccent font-bold text-lg">
-            ConfessWall
-          </button>
+    <main className="min-h-screen bg-black text-white px-4 sm:px-8 py-6">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-2xl font-bold mb-4">
+          Confessions from {address?.slice(0, 6)}...{address?.slice(-4)}
+        </h1>
 
-          {connected ? (
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-irysText">
-                {currentUser.slice(0, 6)}...{currentUser.slice(-4)}
-              </span>
-              <button onClick={disconnectWallet} className="btn-irys">
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <button onClick={connectWallet} className="btn-irys">
-              Connect Wallet
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* MAIN */}
-      <main className="max-w-2xl mx-auto px-4 font-sans">
-        {!connected ? (
-          <p className="text-center text-gray-400">Please connect wallet to view this user’s confessions.</p>
-        ) : (
-          <>
-            <h1 className="text-xl font-bold mb-4 text-irysAccent">
-              Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}
-            </h1>
-
-            <button onClick={() => router.push("/")} className="btn-irys mb-6">
-              ← Back to Home
-            </button>
-
-            {confessions.length === 0 ? (
-              <p>No confessions yet.</p>
-            ) : (
-              confessions.map((item) => (
-                <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
-                  <p className="text-sm text-gray-400">
-                    <span className="text-irysAccent cursor-pointer">
-                      {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                    </span>
-                  </p>
-                  <p className="whitespace-pre-wrap">{item.text}</p>
-                  {item.address === currentUser && (
-                    <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
-                      🗑️ Delete
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </>
+        {/* Confess Box if connected user is viewing their own page */}
+        {address === connectedAddress && (
+          <div className="mb-10">
+            <ConfessBox
+              irysUploader={irysUploader}
+              address={connectedAddress}
+              onUpload={fetchFeed}
+            />
+          </div>
         )}
-      </main>
-    </>
+
+        <section>
+          <h2 className="text-lg font-semibold mb-4">All Confessions</h2>
+          {feed.length === 0 ? (
+            <p className="text-gray-500">No confessions found.</p>
+          ) : (
+            feed.map((item) => (
+              <div
+                key={item.tx_id}
+                className="mb-4 p-4 border border-gray-700 rounded-lg"
+              >
+                <p className="text-sm text-irysAccent mb-2">
+                  {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                </p>
+                <p className="whitespace-pre-wrap">{item.text}</p>
+                {item.address === connectedAddress && (
+                  <button
+                    onClick={() => handleDelete(item.tx_id)}
+                    className="text-sm text-red-400 mt-2"
+                  >
+                    🗑️ Delete
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </section>
+      </div>
+    </main>
   );
 }
