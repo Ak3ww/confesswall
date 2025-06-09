@@ -1,15 +1,22 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "../../lib/supabaseClient";
+import ConfessBox from "../../components/ConfessBox";
 import { ethers } from "ethers";
+import { WebUploader } from "@irys/web-upload";
+import { WebEthereum } from "@irys/web-upload-ethereum";
+import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 
-export default function AddressProfile() {
+export default function AddressPage() {
   const router = useRouter();
   const { address } = router.query;
-  const [confessions, setConfessions] = useState([]);
-  const [page, setPage] = useState(0);
+
+  const [feed, setFeed] = useState([]);
+  const [connectedAddress, setConnectedAddress] = useState("");
+  const [irysUploader, setIrysUploader] = useState(null);
+  const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [userAddress, setUserAddress] = useState("");
+  const PAGE_SIZE = 10;
 
   const decryptConfession = (encrypted) => {
     try {
@@ -19,29 +26,18 @@ export default function AddressProfile() {
     }
   };
 
-  const fetchUserAddress = async () => {
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const userAddr = await signer.getAddress();
-      setUserAddress(userAddr);
-    } catch (err) {
-      console.error("Not connected:", err);
-    }
-  };
+  const fetchFeed = async (start = 0) => {
+    if (!address) return;
 
-  const fetchProfile = async (nextPage = 0) => {
-    const start = nextPage * 10;
-    const end = start + 9;
     const { data, error } = await supabase
       .from("confessions")
       .select("tx_id, encrypted, address")
       .eq("address", address)
       .order("created_at", { ascending: false })
-      .range(start, end);
+      .range(start, start + PAGE_SIZE - 1);
 
     if (error) {
-      console.error("Error loading confessions:", error);
+      console.error("Failed to fetch confessions:", error);
       return;
     }
 
@@ -50,8 +46,14 @@ export default function AddressProfile() {
       text: decryptConfession(item.encrypted),
     }));
 
-    setConfessions((prev) => [...prev, ...formatted]);
-    if (formatted.length < 10) setHasMore(false);
+    if (start === 0) {
+      setFeed(formatted);
+    } else {
+      setFeed((prev) => [...prev, ...formatted]);
+    }
+
+    setHasMore(data.length === PAGE_SIZE);
+    setOffset(start + PAGE_SIZE);
   };
 
   const handleDelete = async (tx_id) => {
@@ -59,117 +61,113 @@ export default function AddressProfile() {
       const message = `Delete Confession with tx_id: ${tx_id}`;
       const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
       const signature = await signer.signMessage(message);
-      const response = await fetch("/api/delete", {
+
+      const res = await fetch("/api/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tx_id, address: userAddress, signature }),
+        body: JSON.stringify({ tx_id, address, signature }),
       });
 
-      const result = await response.json();
+      const result = await res.json();
+
       if (result.success) {
-        setConfessions((prev) => prev.filter((c) => c.tx_id !== tx_id));
-        alert("✅ Deleted!");
+        setFeed((prev) => prev.filter((item) => item.tx_id !== tx_id));
+        alert("✅ Confession deleted");
       } else {
-        alert("❌ Failed to delete");
-        console.error(result.error);
+        console.error("Delete failed:", result.error);
+        alert("❌ Delete failed");
       }
     } catch (err) {
       console.error("Delete error:", err);
-      alert("❌ Error deleting");
+      alert("❌ Delete error");
+    }
+  };
+
+  const initConnected = async () => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const addr = await signer.getAddress();
+      const irys = await WebUploader(WebEthereum).withAdapter(
+        EthersV6Adapter(provider)
+      );
+      setConnectedAddress(addr);
+      setIrysUploader(irys);
+    } catch (err) {
+      console.error("Connect check failed:", err);
     }
   };
 
   useEffect(() => {
-    if (address) {
-      fetchProfile();
-      fetchUserAddress();
-
-      const channel = supabase
-        .channel(`realtime:profile:${address}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "confessions",
-            filter: `address=eq.${address}`,
-          },
-          (payload) => {
-            const newItem = {
-              ...payload.new,
-              text: decryptConfession(payload.new.encrypted),
-            };
-
-            setConfessions((prev) => {
-              const exists = prev.some((c) => c.tx_id === newItem.tx_id);
-              return exists ? prev : [newItem, ...prev];
-            });
-          }
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "DELETE",
-            schema: "public",
-            table: "confessions",
-            filter: `address=eq.${address}`,
-          },
-          (payload) => {
-            setConfessions((prev) =>
-              prev.filter((c) => c.tx_id !== payload.old.tx_id)
-            );
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    initConnected();
+    fetchFeed(0);
   }, [address]);
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}</h1>
-      <button onClick={() => router.push("/")}>⬅ Back to Global Feed</button>
+    <main className="min-h-screen bg-black text-white px-4 sm:px-8 py-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="mb-6">
+          <button
+            onClick={() => router.push("/")}
+            className="btn-irys text-sm mb-3"
+          >
+            ← Back to Global Feed
+          </button>
+          <h1 className="text-2xl font-bold">
+            Confessions from {address?.slice(0, 6)}...{address?.slice(-4)}
+          </h1>
+        </div>
 
-      <section style={{ marginTop: "2rem" }}>
-        {confessions.length === 0 ? (
-          <p>No confessions yet.</p>
-        ) : (
-          <>
-            {confessions.map((c) => (
-              <div
-                key={c.tx_id}
-                style={{
-                  border: "1px solid #ccc",
-                  padding: "1rem",
-                  marginBottom: "1rem",
-                }}
-              >
-                <p style={{ fontSize: "0.9rem", color: "#555" }}>
-                  {c.address.slice(0, 6)}...{c.address.slice(-4)}
-                </p>
-                <p style={{ whiteSpace: "pre-wrap" }}>{c.text}</p>
-                {c.address === userAddress && (
-                  <button onClick={() => handleDelete(c.tx_id)}>🗑️ Delete</button>
-                )}
-              </div>
-            ))}
-            {hasMore && (
-              <button onClick={() => {
-                setPage((prev) => {
-                  const next = prev + 1;
-                  fetchProfile(next);
-                  return next;
-                });
-              }}>
-                Show More
-              </button>
-            )}
-          </>
+        {/* Confess Box if connected user is viewing their own page */}
+        {address === connectedAddress && (
+          <div className="mb-10">
+            <ConfessBox
+              irysUploader={irysUploader}
+              address={connectedAddress}
+              onUpload={() => fetchFeed(0)}
+            />
+          </div>
         )}
-      </section>
+
+        <section>
+          <h2 className="text-lg font-semibold mb-4">All Confessions</h2>
+          {feed.length === 0 ? (
+            <p className="text-gray-500">No confessions found.</p>
+          ) : (
+            <>
+              {feed.map((item) => (
+                <div
+                  key={item.tx_id}
+                  className="mb-4 p-4 border border-gray-700 rounded-lg"
+                >
+                  <p className="text-sm text-irysAccent mb-2">
+                    {item.address.slice(0, 6)}...{item.address.slice(-4)}
+                  </p>
+                  <p className="whitespace-pre-wrap">{item.text}</p>
+                  {item.address === connectedAddress && (
+                    <button
+                      onClick={() => handleDelete(item.tx_id)}
+                      className="text-sm text-red-400 mt-2"
+                    >
+                      🗑️ Delete
+                    </button>
+                  )}
+                </div>
+              ))}
+              {hasMore && (
+                <div className="text-center mt-6">
+                  <button
+                    onClick={() => fetchFeed(offset)}
+                    className="btn-irys px-5 py-2 text-sm"
+                  >
+                    Show More
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
