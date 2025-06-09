@@ -53,31 +53,35 @@ export default function Home() {
   };
 
   const fetchFeed = async (start = 0) => {
-    const { data, error } = await supabase
-      .from("confessions")
-      .select("tx_id, encrypted, address, created_at")
-      .order("created_at", { ascending: false })
-      .range(start, start + 9);
+  const { data, error } = await supabase
+    .from("confessions")
+    .select("tx_id, encrypted, address, created_at")
+    .order("created_at", { ascending: false })
+    .range(start, start + 10); // fetch 11 items
 
-    if (error) {
-      console.error("Failed to fetch feed:", error);
-      return;
-    }
+  if (error) {
+    console.error("Failed to fetch feed:", error);
+    return;
+  }
 
-    const formatted = data.map((item) => ({
-      ...item,
-      text: decryptConfession(item.encrypted),
-    }));
+  const isMore = data.length > 10;
+  const sliced = isMore ? data.slice(0, 10) : data;
 
-    if (start === 0) {
-      setFeed(formatted);
-    } else {
-      setFeed((prev) => [...prev, ...formatted]);
-    }
+  const formatted = sliced.map((item) => ({
+    ...item,
+    text: decryptConfession(item.encrypted),
+  }));
 
-    setOffset(start + 10);
-    setHasMore(data.length === 10);
-  };
+  if (start === 0) {
+    setFeed(formatted);
+  } else {
+    setFeed((prev) => [...prev, ...formatted]);
+  }
+
+  setOffset(start + 10);
+  setHasMore(isMore);
+};
+
 
   const handleDelete = async (tx_id) => {
     try {
