@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global overrides */
+/* Global styles for your site */
 html {
   @apply bg-irysBlack text-irysText font-sans;
 }
@@ -21,4 +21,19 @@ input, textarea {
 
 textarea {
   @apply resize-none;
+}
+
+/* Custom reusable button styles */
+@layer components {
+  .btn-glow {
+    @apply relative inline-flex items-center justify-center px-6 py-2 font-semibold rounded-full transition-all duration-300;
+  }
+
+  .btn-accent {
+    @apply btn-glow text-black bg-irysAccent hover:brightness-110 hover:shadow-[0_0_12px_#00ffd2];
+  }
+
+  .btn-danger {
+    @apply btn-glow text-irysDanger border border-irysDanger hover:bg-irysDanger hover:text-white hover:shadow-[0_0_12px_#ff4b4b];
+  }
 }
