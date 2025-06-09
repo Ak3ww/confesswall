@@ -123,22 +123,34 @@ export default function AddressProfile() {
   }, [address]);
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}</h1>
-      <button onClick={() => router.push("/")}>⬅ Back to Global Feed</button>
+    <main className="p-8 font-sans">
+      <h1 className="text-xl font-bold mb-6">
+        Confessions by {address?.slice(0, 6)}...{address?.slice(-4)}
+      </h1>
+      <button onClick={() => router.push("/")} className="btn-accent mb-8">
+        ⬅ Back to Global Feed
+      </button>
 
       {confessions.length === 0 ? (
-        <p style={{ marginTop: "2rem" }}>No confessions yet.</p>
+        <p className="mt-8">No confessions yet.</p>
       ) : (
-        <div style={{ marginTop: "2rem" }}>
+        <div className="mt-8">
           {confessions.map((c) => (
-            <div key={c.tx_id} style={{ border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem" }}>
-              <p style={{ fontSize: "0.9rem", color: "#555" }}>
+            <div
+              key={c.tx_id}
+              className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray"
+            >
+              <p className="text-sm text-gray-400">
                 {c.address.slice(0, 6)}...{c.address.slice(-4)}
               </p>
-              <p style={{ whiteSpace: "pre-wrap" }}>{c.text}</p>
+              <p className="whitespace-pre-wrap">{c.text}</p>
               {c.address === userAddress && (
-                <button onClick={() => handleDelete(c.tx_id)}>🗑️ Delete</button>
+                <button
+                  onClick={() => handleDelete(c.tx_id)}
+                  className="btn-danger mt-2"
+                >
+                  🗑️ Delete
+                </button>
               )}
             </div>
           ))}
