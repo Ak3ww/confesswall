@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global styles for your site */
+/* Global base styles */
 html {
   @apply bg-irysBlack text-irysText font-sans;
 }
@@ -15,7 +15,7 @@ button {
   @apply cursor-pointer;
 }
 
-input, textarea {
+textarea, input {
   @apply bg-irysBlack text-irysText border border-neutral-800 rounded-md px-3 py-2 w-full;
 }
 
@@ -23,17 +23,9 @@ textarea {
   @apply resize-none;
 }
 
-/* Custom reusable button styles */
+/* True Irys-style rectangular button */
 @layer components {
-  .btn-glow {
-    @apply relative inline-flex items-center justify-center px-6 py-2 font-semibold rounded-full transition-all duration-300;
-  }
-
-  .btn-accent {
-    @apply btn-glow text-black bg-irysAccent hover:brightness-110 hover:shadow-[0_0_12px_#00ffd2];
-  }
-
-  .btn-danger {
-    @apply btn-glow text-irysDanger border border-irysDanger hover:bg-irysDanger hover:text-white hover:shadow-[0_0_12px_#ff4b4b];
+  .btn-irys {
+    @apply px-5 py-2 rounded-md border border-irysAccent text-white bg-black hover:bg-irysAccent hover:text-black transition-colors duration-200;
   }
 }
