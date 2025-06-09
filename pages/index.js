@@ -115,42 +115,37 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!connected) return;
+  if (!connected) return;
 
-    const channel = supabase
-      .channel("realtime:confessions")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "confessions" },
-        (payload) => {
-          const newItem = payload.new;
-          const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
+  const channel = supabase
+    .channel("realtime:confessions")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "confessions" },
+      (payload) => {
+        const newItem = payload.new;
+        setFeed((prev) => {
+          const alreadyExists = prev.some((item) => item.tx_id === newItem.tx_id);
+          if (alreadyExists) return prev;
 
-          if (!alreadyExists) {
-            setFeed((prev) => [
-              {
-                ...newItem,
-                text: decryptConfession(newItem.encrypted),
-              },
-              ...prev,
-            ]);
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "confessions" },
-        (payload) => {
-          const deletedId = payload.old.tx_id;
-          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
-        }
-      )
-      .subscribe();
+          return [{ ...newItem, text: decryptConfession(newItem.encrypted) }, ...prev];
+        });
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "confessions" },
+      (payload) => {
+        const deletedId = payload.old.tx_id;
+        setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+      }
+    )
+    .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [connected, feed]);
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [connected]); // ✅ remove `feed` dependency
 
   return (
     <main className="min-h-screen bg-black text-white px-6 py-8">
