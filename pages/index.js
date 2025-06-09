@@ -54,13 +54,18 @@ export default function Home() {
 
   const uploadData = async () => {
     if (!uploadText || !irysUploader) return;
+
     const encrypted = encryptConfession(uploadText);
 
     try {
       const receipt = await irysUploader.upload(encrypted);
       const tx_id = receipt.id;
 
-      await supabase.from("confessions").insert({ tx_id, encrypted, address });
+      await supabase.from("confessions").insert({
+        tx_id,
+        encrypted,
+        address,
+      });
 
       setUploadResult("✅ Uploaded anonymously");
       setUploadText("");
@@ -119,7 +124,9 @@ export default function Home() {
 
   useEffect(() => {
     const wasConnected = localStorage.getItem("connected");
-    if (wasConnected === "true") connectWallet();
+    if (wasConnected === "true") {
+      connectWallet();
+    }
   }, []);
 
   useEffect(() => {
@@ -129,21 +136,32 @@ export default function Home() {
 
     const channel = supabase
       .channel("realtime:confessions")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "confessions" }, (payload) => {
-        const newItem = payload.new;
-        const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "confessions" },
+        (payload) => {
+          const newItem = payload.new;
+          const alreadyExists = feed.some((item) => item.tx_id === newItem.tx_id);
 
-        if (!alreadyExists) {
-          setFeed((prev) => [
-            { ...newItem, text: decryptConfession(newItem.encrypted) },
-            ...prev,
-          ]);
+          if (!alreadyExists) {
+            setFeed((prev) => [
+              {
+                ...newItem,
+                text: decryptConfession(newItem.encrypted),
+              },
+              ...prev,
+            ]);
+          }
         }
-      })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "confessions" }, (payload) => {
-        const deletedId = payload.old.tx_id;
-        setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
-      })
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "confessions" },
+        (payload) => {
+          const deletedId = payload.old.tx_id;
+          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
+        }
+      )
       .subscribe();
 
     return () => {
@@ -152,23 +170,20 @@ export default function Home() {
   }, [connected, feed]);
 
   return (
-    <>
-      {/* HEADER */}
-      <header className="w-full border-b border-irysAccent bg-black px-4 py-3 mb-8">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          {/* Left: Home */}
+    <main className="min-h-screen bg-irysBlack text-irysText px-4 py-6">
+      {/* Header */}
+      <header className="w-full border-b border-irysAccent py-4 mb-6">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
           <button onClick={() => router.push("/")} className="text-irysAccent font-bold text-lg">
             ConfessWall
           </button>
-
-          {/* Right: Wallet Connect / Disconnect */}
           {!connected ? (
             <button onClick={connectWallet} className="btn-irys">
               Connect Wallet
             </button>
           ) : (
             <div className="flex items-center gap-4">
-              <span className="text-sm text-irysText">
+              <span className="text-sm">
                 {address.slice(0, 6)}...{address.slice(-4)}
               </span>
               <button onClick={disconnectWallet} className="btn-irys">
@@ -179,43 +194,60 @@ export default function Home() {
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
-      <main className="max-w-2xl mx-auto px-4 font-sans">
-        <div className="mb-10">
-          <textarea
-            placeholder="Write your confession..."
-            rows="4"
-            value={uploadText}
-            onChange={(e) => setUploadText(e.target.value)}
-            className="w-full mb-4 p-3 rounded-md bg-irysBlack text-irysText border border-neutral-800"
-          />
-          <button onClick={uploadData} className="btn-irys">Upload</button>
-          {uploadResult && <p className="mt-4">{uploadResult}</p>}
-        </div>
+      {/* Confession Form + Feed */}
+      <div className="max-w-2xl mx-auto">
+        {!connected ? (
+          <p className="text-center text-irysText/70">
+            Please connect your wallet to submit and view confessions.
+          </p>
+        ) : (
+          <>
+            {/* Upload */}
+            <textarea
+              placeholder="Write your confession..."
+              rows="4"
+              className="w-full bg-irysGray text-white p-3 rounded-md mb-4 resize-none"
+              value={uploadText}
+              onChange={(e) => setUploadText(e.target.value)}
+            />
+            <button onClick={uploadData} className="btn-irys w-full mb-2">
+              Upload
+            </button>
+            {uploadResult && (
+              <p className="text-center text-sm text-irysAccent mb-6">{uploadResult}</p>
+            )}
 
-        <section>
-          <h2 className="text-lg font-semibold mb-4">Latest Confessions</h2>
-          {feed.length === 0 ? (
-            <p>No confessions yet.</p>
-          ) : (
-            feed.map((item) => (
-              <div key={item.tx_id} className="mb-4 p-4 border border-neutral-800 rounded-lg bg-irysGray">
-                <p className="text-sm text-gray-400">
-                  <span className="text-irysAccent cursor-pointer" onClick={() => router.push(`/address/${item.address}`)}>
+            {/* Feed */}
+            <h2 className="text-lg font-semibold mb-3">Latest Confessions</h2>
+            {feed.length === 0 ? (
+              <p>No confessions yet.</p>
+            ) : (
+              feed.map((item) => (
+                <div
+                  key={item.tx_id}
+                  className="bg-irysGray p-4 mb-4 rounded-md border border-irysAccent"
+                >
+                  <p
+                    className="text-sm text-irysAccent cursor-pointer"
+                    onClick={() => router.push(`/address/${item.address}`)}
+                  >
                     {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                  </span>
-                </p>
-                <p className="whitespace-pre-wrap">{item.text}</p>
-                {item.address === address && (
-                  <button onClick={() => handleDelete(item.tx_id)} className="btn-irys mt-2">
-                    🗑️ Delete
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-        </section>
-      </main>
-    </>
+                  </p>
+                  <p className="whitespace-pre-wrap my-2">{item.text}</p>
+                  {item.address === address && (
+                    <button
+                      onClick={() => handleDelete(item.tx_id)}
+                      className="btn-irys-danger text-sm"
+                    >
+                      🗑️ Delete
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </>
+        )}
+      </div>
+    </main>
   );
 }
