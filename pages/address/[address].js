@@ -7,6 +7,29 @@ import { WebUploader } from "@irys/web-upload";
 import { WebEthereum } from "@irys/web-upload-ethereum";
 import { EthersV6Adapter } from "@irys/web-upload-ethereum-ethers-v6";
 
+const formatTimeAgo = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now - date) / 1000);
+
+  const intervals = [
+    { label: "y", seconds: 31536000 },
+    { label: "mo", seconds: 2592000 },
+    { label: "w", seconds: 604800 },
+    { label: "d", seconds: 86400 },
+    { label: "h", seconds: 3600 },
+    { label: "m", seconds: 60 },
+    { label: "s", seconds: 1 },
+  ];
+
+  for (const interval of intervals) {
+    const count = Math.floor(seconds / interval.seconds);
+    if (count >= 1) return `${count}${interval.label}`;
+  }
+
+  return "just now";
+};
+
 export default function AddressPage() {
   const router = useRouter();
   const { address } = router.query;
@@ -14,8 +37,6 @@ export default function AddressPage() {
   const [feed, setFeed] = useState([]);
   const [connectedAddress, setConnectedAddress] = useState("");
   const [irysUploader, setIrysUploader] = useState(null);
-  const [page, setPage] = useState(1);
-  const perPage = 10;
 
   const decryptConfession = (encrypted) => {
     try {
@@ -25,18 +46,14 @@ export default function AddressPage() {
     }
   };
 
-  const fetchFeed = async (page = 1) => {
+  const fetchFeed = async () => {
     if (!address) return;
-
-    const from = (page - 1) * perPage;
-    const to = from + perPage - 1;
 
     const { data, error } = await supabase
       .from("confessions")
-      .select("tx_id, encrypted, address")
+      .select("tx_id, encrypted, address, created_at")
       .eq("address", address)
-      .order("created_at", { ascending: false })
-      .range(from, to);
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Failed to fetch confessions:", error);
@@ -46,9 +63,10 @@ export default function AddressPage() {
     const formatted = data.map((item) => ({
       ...item,
       text: decryptConfession(item.encrypted),
+      time: formatTimeAgo(item.created_at),
     }));
 
-    setFeed((prev) => [...prev, ...formatted]);
+    setFeed(formatted);
   };
 
   const handleDelete = async (tx_id) => {
@@ -93,66 +111,10 @@ export default function AddressPage() {
     }
   };
 
-  // ⚠️ Subscribing to real-time insert/delete once
-  useEffect(() => {
-    if (!address) return;
-
-    const channel = supabase
-      .channel("realtime:confessions")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "confessions",
-          filter: `address=eq.${address}`,
-        },
-        (payload) => {
-          const newItem = payload.new;
-          setFeed((prev) => {
-            const alreadyExists = prev.some((item) => item.tx_id === newItem.tx_id);
-            if (alreadyExists) return prev;
-
-            return [
-              {
-                ...newItem,
-                text: decryptConfession(newItem.encrypted),
-              },
-              ...prev,
-            ];
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "confessions",
-          filter: `address=eq.${address}`,
-        },
-        (payload) => {
-          const deletedId = payload.old.tx_id;
-          setFeed((prev) => prev.filter((item) => item.tx_id !== deletedId));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [address]);
-
   useEffect(() => {
     initConnected();
     fetchFeed();
   }, [address]);
-
-  const handleShowMore = () => {
-    const nextPage = page + 1;
-    fetchFeed(nextPage);
-    setPage(nextPage);
-  };
 
   return (
     <main className="min-h-screen bg-black text-white px-4 sm:px-8 py-6">
@@ -174,11 +136,7 @@ export default function AddressPage() {
             <ConfessBox
               irysUploader={irysUploader}
               address={connectedAddress}
-              onUpload={() => {
-                setFeed([]);
-                setPage(1);
-                fetchFeed(1);
-              }}
+              onUpload={fetchFeed}
             />
           </div>
         )}
@@ -188,34 +146,26 @@ export default function AddressPage() {
           {feed.length === 0 ? (
             <p className="text-gray-500">No confessions found.</p>
           ) : (
-            <>
-              {feed.map((item) => (
-                <div
-                  key={item.tx_id}
-                  className="mb-4 p-4 border border-gray-700 rounded-lg"
-                >
-                  <p className="text-sm text-irysAccent mb-2">
-                    {item.address.slice(0, 6)}...{item.address.slice(-4)}
-                  </p>
-                  <p className="whitespace-pre-wrap">{item.text}</p>
-                  {item.address === connectedAddress && (
-                    <button
-                      onClick={() => handleDelete(item.tx_id)}
-                      className="text-sm text-red-400 mt-2"
-                    >
-                      🗑️ Delete
-                    </button>
-                  )}
-                </div>
-              ))}
-              {feed.length % perPage === 0 && (
-                <div className="text-center mt-4">
-                  <button onClick={handleShowMore} className="btn-irys px-4 py-1">
-                    Show More
+            feed.map((item) => (
+              <div
+                key={item.tx_id}
+                className="mb-4 p-4 border border-gray-700 rounded-lg bg-[#111]"
+              >
+                <p className="text-sm text-irysAccent mb-2">
+                  {item.address.slice(0, 6)}...{item.address.slice(-4)} ·{" "}
+                  <span className="text-gray-400">{item.time}</span>
+                </p>
+                <p className="whitespace-pre-wrap">{item.text}</p>
+                {item.address === connectedAddress && (
+                  <button
+                    onClick={() => handleDelete(item.tx_id)}
+                    className="text-sm text-red-400 mt-2 hover:underline"
+                  >
+                    🗑️ Delete
                   </button>
-                </div>
-              )}
-            </>
+                )}
+              </div>
+            ))
           )}
         </section>
       </div>
