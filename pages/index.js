@@ -181,7 +181,7 @@ export default function Home() {
           <p className="text-gray-400 mb-6">
             Connect your wallet to post and view anonymous confessions stored onchain.
           </p>
-          <p className="text-xs text-gray-500">Powered by Irys + Supabase</p>
+          <p className="text-xs text-gray-500">Powered by <a href="https://irys.xyz">Irys</a></p>
         </div>
       ) : (
         <div className="max-w-2xl mx-auto space-y-12">
